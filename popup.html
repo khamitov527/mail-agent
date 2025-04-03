@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mail Agent</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Mail Agent</h1>
+    <div class="status-container">
+      <div id="status">Ready</div>
+      <div id="indicator" class="off"></div>
+    </div>
+    <button id="startButton">Start Listening</button>
+    <button id="stopButton" disabled>Stop Listening</button>
+    <div class="transcript-container">
+      <h3>Transcript:</h3>
+      <div id="transcript"></div>
+    </div>
+    <div class="commands-help">
+      <h3>Available Commands:</h3>
+      <ul>
+        <li>"Compose email to [name]"</li>
+        <li>"Subject: [subject text]"</li>
+        <li>"Say: [message body]"</li>
+        <li>"Send" or "Send the email"</li>
+        <li>"Cancel" or "Discard email"</li>
+      </ul>
+    </div>
+    <div class="options-link">
+      <a href="#" id="optionsLink">Settings</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Mail Agent",
+  "version": "1.0",
+  "description": "Voice-controlled email assistant for Gmail",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": ["*://mail.google.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["*://mail.google.com/*"],
+    "js": ["content.js"]
+  }],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icon.png"
+  }
+} 
