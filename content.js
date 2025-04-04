@@ -1,7 +1,7 @@
 // Command handler for Gmail
 class GmailCommandHandler {
   constructor() {
-    this.setupMessageListeners();
+    this.setupMessageListener();
     this.setupNotificationSystem();
     // Fixed settings - no longer configurable
     this.settings = {
@@ -19,6 +19,8 @@ class GmailCommandHandler {
     this.recognitionTimeout = null;
     this.modal = null;
     this.modalTranscript = null;
+    this.cumulativeTranscript = '';
+    this.finalTranscript = '';
     
     // Initialize the action executor for DOM parsing and OpenAI integration
     this.actionExecutor = null;
@@ -44,7 +46,7 @@ class GmailCommandHandler {
     }
   }
 
-  setupMessageListeners() {
+  setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === 'processVoiceCommand') {
         // We'll still accept settings from messages for backward compatibility,
@@ -137,8 +139,8 @@ class GmailCommandHandler {
     this.modal.className = 'vesper-modal';
     this.modal.style.cssText = `
       position: fixed;
-      top: 50px;
-      right: 20px;
+      bottom: 50px;
+      left: 20px;
       width: 280px;
       background-color: white;
       border-radius: 12px;
@@ -314,6 +316,112 @@ class GmailCommandHandler {
       flex-direction: column;
     `;
     
+    // Create listen button
+    this.listenButton = document.createElement('button');
+    this.listenButton.className = 'vesper-listen-button';
+    this.listenButton.style.cssText = `
+      background-color: ${mainColor};
+      color: white;
+      border: none;
+      border-radius: 22px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      margin: 5px 0 15px 0;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(65, 105, 225, 0.3);
+      align-self: center;
+      width: 90%;
+    `;
+    this.listenButton.textContent = 'Start Listening';
+    
+    // Add button event listener
+    this.listenButton.addEventListener('click', () => {
+      if (this.currentState.isListening) {
+        // If already listening, stop and process
+        this.finalTranscript = this.cumulativeTranscript || '';
+        this.stopSpeechRecognition();
+        
+        // Only process if we have something to process
+        if (this.finalTranscript && this.finalTranscript.trim()) {
+          console.log('Processing final transcript:', this.finalTranscript);
+          
+          // Clear the transcript content and add just the latest speech
+          if (this.modalTranscript) {
+            this.modalTranscript.innerHTML = '';
+            // Add the final speech message (what user said)
+            this.addToModalTranscript(this.finalTranscript, false, false);
+          }
+          
+          // Process the full transcript
+          if (this.actionExecutor) {
+            this.actionExecutor.processVoiceCommand(this.finalTranscript.trim())
+              .then(result => {
+                console.log(`ActionExecutor result:`, JSON.stringify(result, null, 2));
+                
+                if (result.success) {
+                  // Check if we got a "No action" response
+                  if (result.message && result.message.includes('No action') || 
+                      (typeof result.action === 'object' && result.action.action === 'No action')) {
+                    console.log('No specific action found for command, falling back to default handler');
+                    this.processCommand(this.finalTranscript.trim());
+                  } else if (result.warning || (result.action && result.action.warning)) {
+                    // Handle warning cases (action executed but no visible change)
+                    const warning = result.warning || (result.action && result.action.warning);
+                    const reasons = result.possibleReasons || (result.action && result.action.possibleReasons) || [];
+                    
+                    console.warn('Command processed but with warnings:', warning);
+                    
+                    // Show more detailed notification
+                    this.showNotification(`Action might not have worked as expected. ${reasons[0] || ''}`, 'warning');
+                    
+                    // Add system message about the warning
+                    if (this.modalTranscript) {
+                      this.addToModalTranscript(`⚠️ ${warning}`, false, true);
+                      if (reasons.length > 0) {
+                        this.addToModalTranscript(`Possible reason: ${reasons[0]}`, false, true);
+                      }
+                    }
+                  } else {
+                    console.log('Command processed successfully by ActionExecutor');
+                    this.showNotification(`Command processed: ${this.finalTranscript.trim()}`, 'success');
+                    // Add system message about successful processing
+                    if (this.modalTranscript) {
+                      this.addToModalTranscript('✓ Command processed successfully', false, true);
+                    }
+                  }
+                } else {
+                  // If OpenAI processing failed, fall back to original method
+                  console.warn('OpenAI processing failed, falling back to default handler');
+                  console.warn('Error details:', result.error);
+                  this.showNotification(`Action processing failed: ${result.error || 'Unknown error'}`, 'warning');
+                  this.processCommand(this.finalTranscript.trim());
+                }
+              })
+              .catch(error => {
+                console.error('Error processing with ActionExecutor:', error);
+                console.error('Stack trace:', error.stack);
+                // Fall back to original processing on error
+                this.processCommand(this.finalTranscript.trim());
+              });
+          } else {
+            // Fall back to original processing if no action executor
+            this.processCommand(this.finalTranscript.trim());
+          }
+        }
+        
+        // Reset for next recording
+        this.cumulativeTranscript = '';
+      } else {
+        // Start listening
+        this.cumulativeTranscript = '';
+        this.startSpeechRecognition();
+      }
+    });
+    
+    modalBody.appendChild(this.listenButton);
+    
     // Create transcript container
     const transcriptContainer = document.createElement('div');
     transcriptContainer.className = 'vesper-modal-transcript';
@@ -342,7 +450,7 @@ class GmailCommandHandler {
       padding: 10px;
       margin: 20px 0;
     `;
-    helpMessage.innerHTML = `<div style="margin-bottom:10px;">🎤</div>Say a command like<br><strong style="color:${mainColor};">"compose email to John"</strong>`;
+    helpMessage.innerHTML = `<div style="margin-bottom:10px;">🎤</div>Click <strong style="color:${mainColor};">"Start Listening"</strong> and give a command`;
     this.modalTranscript.appendChild(helpMessage);
     
     modalBody.appendChild(transcriptContainer);
@@ -369,6 +477,14 @@ class GmailCommandHandler {
     waves.forEach(wave => {
       wave.style.opacity = isActive ? '1' : '0';
     });
+  }
+  
+  // Synchronize wave animation with current listening state
+  syncWaveAnimationWithState() {
+    if (!this.modal) return;
+    
+    // Only show animation when actively listening
+    this.setWaveAnimation(this.currentState.isListening);
   }
   
   // Make the modal draggable
@@ -459,8 +575,8 @@ class GmailCommandHandler {
     
     // Update modal if it exists
     if (this.modal) {
-      // Activate the wave animation
-      this.setWaveAnimation(true);
+      // Sync wave animation with listening state
+      this.syncWaveAnimationWithState();
     }
     
     // Clear any existing timeout
@@ -510,68 +626,9 @@ class GmailCommandHandler {
         finalTranscript += transcript;
         console.log('Final transcript:', transcript.trim());
         
-        // Process the command with our new action executor if available
-        if (this.actionExecutor) {
-          // Add a system message to show processing status
-          if (this.modalTranscript) {
-            this.addToModalTranscript(`Processing: "${transcript.trim()}"`, false, true);
-          }
-          
-          // Process command through the action executor which uses DOM parsing and OpenAI
-          console.log(`Sending voice command to ActionExecutor: "${transcript.trim()}"`);
-          this.actionExecutor.processVoiceCommand(transcript.trim())
-            .then(result => {
-              console.log(`ActionExecutor result:`, JSON.stringify(result, null, 2));
-              
-              if (result.success) {
-                // Check if we got a "No action" response
-                if (result.message && result.message.includes('No action') || 
-                    (typeof result.action === 'object' && result.action.action === 'No action')) {
-                  console.log('No specific action found for command, falling back to default handler');
-                  this.processCommand(transcript.trim());
-                } else if (result.warning || (result.action && result.action.warning)) {
-                  // Handle warning cases (action executed but no visible change)
-                  const warning = result.warning || (result.action && result.action.warning);
-                  const reasons = result.possibleReasons || (result.action && result.action.possibleReasons) || [];
-                  
-                  console.warn('Command processed but with warnings:', warning);
-                  
-                  // Show more detailed notification
-                  this.showNotification(`Action might not have worked as expected. ${reasons[0] || ''}`, 'warning');
-                  
-                  // Add system message about the warning
-                  if (this.modalTranscript) {
-                    this.addToModalTranscript(`⚠️ ${warning}`, false, true);
-                    if (reasons.length > 0) {
-                      this.addToModalTranscript(`Possible reason: ${reasons[0]}`, false, true);
-                    }
-                  }
-                } else {
-                  console.log('Command processed successfully by ActionExecutor');
-                  this.showNotification(`Command processed: ${transcript.trim()}`, 'success');
-                  // Add system message about successful processing
-                  if (this.modalTranscript) {
-                    this.addToModalTranscript('✓ Command processed successfully', false, true);
-                  }
-                }
-              } else {
-                // If OpenAI processing failed, fall back to original method
-                console.warn('OpenAI processing failed, falling back to default handler');
-                console.warn('Error details:', result.error);
-                this.showNotification(`Action processing failed: ${result.error || 'Unknown error'}`, 'warning');
-                this.processCommand(transcript.trim());
-              }
-            })
-            .catch(error => {
-              console.error('Error processing with ActionExecutor:', error);
-              console.error('Stack trace:', error.stack);
-              // Fall back to original processing on error
-              this.processCommand(transcript.trim());
-            });
-        } else {
-          // Fall back to original processing if no action executor
-          this.processCommand(transcript.trim());
-        }
+        // Instead of processing immediately, accumulate the transcript
+        this.cumulativeTranscript += (this.cumulativeTranscript ? ' ' : '') + transcript.trim();
+        console.log('Cumulative transcript so far:', this.cumulativeTranscript);
         
         // Send transcript to the popup
         chrome.runtime.sendMessage({
@@ -580,10 +637,11 @@ class GmailCommandHandler {
           isFinal: true
         });
         
-        // Update modal transcript if it exists
-        if (this.modalTranscript) {
-          this.addToModalTranscript(transcript.trim(), false, false);
-        }
+        // Don't add final transcripts to the modal - we'll only show the complete message when done
+        // Remove this line to avoid duplicates
+        // if (this.modalTranscript) {
+        //   this.addToModalTranscript(transcript.trim(), false, false);
+        // }
       } else {
         interimTranscript += transcript;
         console.log('Interim transcript:', interimTranscript);
@@ -685,8 +743,8 @@ class GmailCommandHandler {
       
       // Update modal if it exists
       if (this.modal) {
-        // Deactivate wave animation
-        this.setWaveAnimation(false);
+        // Sync wave animation with listening state
+        this.syncWaveAnimationWithState();
         
         if (this.modalTranscript) {
           this.addToModalTranscript('Stopped listening', false, true);
@@ -710,13 +768,20 @@ class GmailCommandHandler {
       this.currentState.isListening = true;
       this.recognition.start();
       
+      // Update button text if it exists
+      if (this.listenButton) {
+        this.listenButton.textContent = 'Stop Listening';
+        this.listenButton.style.backgroundColor = '#d32f2f'; // Red color
+      }
+      
       // Update modal status if it exists
       if (this.modal) {
-        // Activate wave animation
-        this.setWaveAnimation(true);
+        // Sync wave animation with listening state
+        this.syncWaveAnimationWithState();
         
         // Clear transcript and add helper message
         if (this.modalTranscript) {
+          // Clear the transcript to remove any previous messages
           this.modalTranscript.innerHTML = '';
           
           const mainColor = this.settings.mainColor || '#4169E1'; // Royal Blue
@@ -741,6 +806,7 @@ class GmailCommandHandler {
       console.error('Error starting speech recognition:', e);
       this.showNotification('Error starting speech recognition: ' + e.message, 'error');
       this.currentState.isListening = false;
+      this.syncWaveAnimationWithState(); // Sync after state change
       return false;
     }
   }
@@ -751,6 +817,8 @@ class GmailCommandHandler {
     if (this.recognition) {
       try {
         this.recognition.stop();
+        // Completely recreate the recognition object to ensure we can start fresh next time
+        this.recognition = null;
       } catch (e) {
         console.error('Error stopping recognition:', e);
       }
@@ -761,6 +829,12 @@ class GmailCommandHandler {
       this.recognitionTimeout = null;
     }
     
+    // Update button text if it exists
+    if (this.listenButton) {
+      this.listenButton.textContent = 'Start Listening';
+      this.listenButton.style.backgroundColor = this.settings.mainColor || '#4169E1'; // Back to blue
+    }
+    
     // Notify the popup that recognition stopped
     chrome.runtime.sendMessage({
       action: 'recognitionStatusChanged',
@@ -769,8 +843,8 @@ class GmailCommandHandler {
     
     // Update modal status if it exists
     if (this.modal) {
-      // Deactivate wave animation
-      this.setWaveAnimation(false);
+      // Sync wave animation with listening state
+      this.syncWaveAnimationWithState();
       
       if (this.modalTranscript) {
         this.addToModalTranscript('Stopped listening', false, true);
@@ -1455,15 +1529,6 @@ class GmailCommandHandler {
       
       speechDiv.textContent = text;
       this.modalTranscript.appendChild(speechDiv);
-      
-      // Animate the wave when speaking
-      this.setWaveAnimation(true);
-      setTimeout(() => {
-        // Turn off wave animation after a short delay
-        if (this.currentState.isListening) {
-          this.setWaveAnimation(false);
-        }
-      }, 1500);
     }
     
     // Ensure scrolling to show the latest content

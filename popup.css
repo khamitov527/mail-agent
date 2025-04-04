@@ -41,30 +41,92 @@ h1 {
   letter-spacing: 0.5px;
 }
 
-#launchButton {
-  background-color: #4169E1; /* Royal blue */
-  color: white;
+.button-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+.primary-button, .secondary-button {
+  flex: 1;
   border: none;
   border-radius: 22px;
-  padding: 12px 30px;
-  font-size: 15px;
+  padding: 10px 0;
+  font-size: 14px;
   font-weight: 400;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(65, 105, 225, 0.3);
   letter-spacing: 0.3px;
   outline: none;
+  text-align: center;
 }
 
-#launchButton:hover {
+.primary-button {
+  background-color: #4169E1; /* Royal blue */
+  color: white;
+  box-shadow: 0 2px 8px rgba(65, 105, 225, 0.3);
+}
+
+.primary-button:hover:not(:disabled) {
   background-color: #3a5ecc;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(65, 105, 225, 0.4);
 }
 
-#launchButton:active {
+.primary-button:active:not(:disabled) {
   transform: translateY(1px);
   box-shadow: 0 1px 4px rgba(65, 105, 225, 0.3);
+}
+
+.secondary-button {
+  background-color: #e8eaed;
+  color: #202124;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.secondary-button:hover:not(:disabled) {
+  background-color: #dadce0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.secondary-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+.status-text {
+  margin-top: 15px;
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  border-radius: 16px;
+  font-size: 14px;
+  text-align: center;
+  color: #5f6368;
+  transition: all 0.3s ease;
+}
+
+.status-text.listening {
+  background-color: #e6f4ea;
+  color: #1e8e3e;
+  font-weight: 500;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
 }
 
 .status-container {
@@ -118,12 +180,6 @@ h1 {
 
 #toggleButton:active {
   transform: scale(0.98);
-}
-
-button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-  transform: none;
 }
 
 .transcript-container {

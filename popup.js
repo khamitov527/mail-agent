@@ -31,13 +31,15 @@ document.addEventListener('DOMContentLoaded', function() {
               mainColor: '#4169E1' // Royal Blue
             };
             
-            // Start speech recognition
-            window.mailAgentHandler.startSpeechRecognition();
-            
             // Create the modal UI if it doesn't exist
             if (!document.querySelector('.vesper-modal')) {
               window.mailAgentHandler.createModal();
+            } else {
+              // Make sure the modal is visible
+              const modal = document.querySelector('.vesper-modal');
+              modal.style.display = 'flex';
             }
+            
             return {status: 'started'};
           } else {
             console.error('Voice assistant handler not found in page');
