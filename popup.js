@@ -6,28 +6,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const transcriptDiv = document.getElementById('transcript');
   
   let isListening = false;
-  let settings = {
+
+  // Fixed default settings (no longer configurable)
+  const settings = {
     language: 'en-US',
-    autoStart: false,
     showNotifications: true,
-    notificationDuration: 3,
-    contacts: []
+    notificationDuration: 3
   };
   
-  // Load settings
-  function loadSettings() {
-    chrome.storage.sync.get(settings, (items) => {
-      settings = items;
-      
-      // Check if we should start listening immediately
-      if (settings.autoStart) {
-        startListening();
-      }
-      
-      // Check if we're already listening (in case popup was reopened)
-      checkRecognitionStatus();
-    });
-  }
+  // Check if we're already listening (in case popup was reopened)
+  checkRecognitionStatus();
   
   // Check with content script to see if recognition is already running
   function checkRecognitionStatus() {
@@ -97,10 +85,28 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (response && response.status === 'started') {
           updateListeningState(true);
-          transcriptDiv.textContent = '';
+          
+          // Clear transcript when starting a new session
+          clearTranscript();
+          
+          // Show a helper message
+          showHelperMessage();
         }
       });
     });
+  }
+  
+  // Clear the transcript
+  function clearTranscript() {
+    transcriptDiv.innerHTML = '';
+  }
+  
+  // Show a helper message
+  function showHelperMessage() {
+    const helperElement = document.createElement('div');
+    helperElement.className = 'transcript-help';
+    helperElement.innerHTML = '<span class="mic-icon">🎤</span> Say a command like <span class="example-command">"compose email to John"</span>';
+    transcriptDiv.appendChild(helperElement);
   }
   
   function stopListening() {
@@ -120,6 +126,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         updateListeningState(false);
+        
+        // Add a "stopped listening" message
+        const stoppedElement = document.createElement('div');
+        stoppedElement.className = 'transcript-stopped';
+        stoppedElement.innerHTML = 'Stopped listening';
+        transcriptDiv.appendChild(stoppedElement);
       });
     });
   }
@@ -128,7 +140,88 @@ document.addEventListener('DOMContentLoaded', function() {
   function showError(message) {
     statusText.textContent = 'Error';
     statusText.style.color = '#c62828';
-    transcriptDiv.innerHTML = `<span style="color: #c62828;">${message}</span>`;
+    transcriptDiv.innerHTML = `<div class="transcript-error"><span class="error-icon">⚠️</span> ${message}</div>`;
+  }
+  
+  // Add a new transcript line with proper styling
+  function addTranscriptLine(text, isInterim = false, isCommand = false) {
+    // Remove any previous interim result
+    const interimElements = transcriptDiv.querySelectorAll('.interim-result');
+    interimElements.forEach(el => el.remove());
+    
+    // Remove helper text if present
+    const helpElement = transcriptDiv.querySelector('.transcript-help');
+    if (helpElement) {
+      helpElement.remove();
+    }
+    
+    if (isInterim) {
+      // For interim results, create an interim container or use existing one
+      let interimContainer = transcriptDiv.querySelector('.interim-container');
+      
+      if (!interimContainer) {
+        interimContainer = document.createElement('div');
+        interimContainer.className = 'interim-container';
+        transcriptDiv.appendChild(interimContainer);
+      }
+      
+      // Replace the interim result content
+      interimContainer.innerHTML = `
+        <div class="interim-result">
+          <span class="interim-label">Listening:</span>
+          <span class="interim-text">${text}</span>
+        </div>
+      `;
+    } else if (isCommand) {
+      // For commands, add under the last user speech
+      const lastLine = transcriptDiv.querySelector('.transcript-line:last-child');
+      if (lastLine) {
+        // Create command container
+        const commandElement = document.createElement('div');
+        commandElement.className = 'command-executed';
+        
+        // Add icon based on command type
+        let iconHTML = '✅';
+        if (text.includes('Composing')) {
+          iconHTML = '✉️';
+        } else if (text.includes('Setting subject')) {
+          iconHTML = '📝';
+        } else if (text.includes('Setting message')) {
+          iconHTML = '📄';
+        } else if (text.includes('Sending')) {
+          iconHTML = '📨';
+        } else if (text.includes('Discarding')) {
+          iconHTML = '🗑️';
+        } else if (text.includes('Clearing')) {
+          iconHTML = '🧹';
+        } else if (text.includes('not recognized')) {
+          iconHTML = '❓';
+        }
+        
+        commandElement.innerHTML = `<span class="command-icon">${iconHTML}</span> <span class="command-text">${text}</span>`;
+        lastLine.appendChild(commandElement);
+      }
+    } else {
+      // For user speech, add as a new line
+      const lineElement = document.createElement('div');
+      lineElement.className = 'transcript-line';
+      
+      // Add timestamp
+      const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      
+      const speechElement = document.createElement('div');
+      speechElement.className = 'user-speech';
+      speechElement.innerHTML = `
+        <span class="speech-timestamp">${timestamp}</span>
+        <span class="speech-text">${text}</span>
+      `;
+      
+      lineElement.appendChild(speechElement);
+      transcriptDiv.appendChild(lineElement);
+    }
+    
+    // Scroll to the bottom
+    transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
   }
   
   // Listen for messages from the content script
@@ -136,29 +229,66 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle transcript updates
     if (message.action === 'transcriptUpdated') {
       if (message.isFinal) {
-        // For final results, add to transcript history
-        const currentText = transcriptDiv.innerHTML;
-        transcriptDiv.innerHTML = `${currentText ? currentText + '<br>' : ''}${message.transcript}`;
-        
-        // Scroll to bottom
-        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        // For final results, add as user speech
+        addTranscriptLine(message.transcript, false, false);
       } else {
-        // For interim results, show in italics and replace current line
-        const lines = transcriptDiv.innerHTML.split('<br>');
-        const allButLast = lines.slice(0, -1).join('<br>');
-        transcriptDiv.innerHTML = `${allButLast ? allButLast + '<br>' : ''}<i>${message.transcript}</i>`;
+        // For interim results, show with special styling
+        addTranscriptLine(message.transcript, true, false);
       }
+    }
+    
+    // Handle command executed notification
+    if (message.action === 'commandExecuted') {
+      // Add the command that was executed
+      addTranscriptLine(message.command, false, true);
     }
     
     // Handle recognition status changes
     if (message.action === 'recognitionStatusChanged') {
       updateListeningState(message.isListening);
+      
+      // If turned off, show a message
+      if (!message.isListening) {
+        const stoppedElement = document.createElement('div');
+        stoppedElement.className = 'transcript-stopped';
+        stoppedElement.innerHTML = 'Stopped listening';
+        transcriptDiv.appendChild(stoppedElement);
+      }
     }
     
     // Handle recognition errors
     if (message.action === 'recognitionError') {
       // Just log it here, the content script will show a notification
       console.error('Recognition error:', message.error);
+      
+      // Add error to transcript
+      const errorElement = document.createElement('div');
+      errorElement.className = 'transcript-error';
+      
+      let errorMessage = '';
+      switch (message.error) {
+        case 'no-speech':
+          errorMessage = 'No speech detected. Please try again.';
+          break;
+        case 'aborted':
+          errorMessage = 'Recognition aborted';
+          break;
+        case 'audio-capture':
+          errorMessage = 'Microphone not available';
+          break;
+        case 'network':
+          errorMessage = 'Network error. Check your connection.';
+          break;
+        case 'not-allowed':
+        case 'service-not-allowed':
+          errorMessage = 'Microphone access denied';
+          break;
+        default:
+          errorMessage = `Error: ${message.error}`;
+      }
+      
+      errorElement.innerHTML = `<span class="error-icon">⚠️</span> ${errorMessage}`;
+      transcriptDiv.appendChild(errorElement);
       
       // If it's a fatal error, update the UI
       if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(message.error)) {
@@ -170,11 +300,6 @@ document.addEventListener('DOMContentLoaded', function() {
     return true;
   });
   
-  // Options link
-  document.getElementById('optionsLink').addEventListener('click', function() {
-    chrome.runtime.openOptionsPage();
-  });
-  
   // Set up button listeners
   startButton.addEventListener('click', startListening);
   stopButton.addEventListener('click', stopListening);
@@ -184,7 +309,4 @@ document.addEventListener('DOMContentLoaded', function() {
     // We don't need to stop listening when popup closes
     // The content script will continue listening
   });
-  
-  // Load settings when popup opens
-  loadSettings();
 }); 

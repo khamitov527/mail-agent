@@ -3,6 +3,7 @@ class GmailCommandHandler {
   constructor() {
     this.setupMessageListeners();
     this.setupNotificationSystem();
+    // Fixed settings - no longer configurable
     this.settings = {
       showNotifications: true,
       notificationDuration: 3,
@@ -21,7 +22,8 @@ class GmailCommandHandler {
   setupMessageListeners() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === 'processVoiceCommand') {
-        // Update settings if they were passed
+        // We'll still accept settings from messages for backward compatibility,
+        // but we don't rely on it anymore
         if (message.settings) {
           this.settings = message.settings;
         }
@@ -395,6 +397,40 @@ class GmailCommandHandler {
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  // Send information about the executed command to the popup
+  notifyCommandExecuted(commandType, details) {
+    let commandText = '';
+    
+    switch (commandType) {
+      case 'compose':
+        commandText = details ? `Composing email to: ${details}` : 'Composing new email';
+        break;
+      case 'subject':
+        commandText = `Setting subject: "${details}"`;
+        break;  
+      case 'body':
+        commandText = `Setting message body`;
+        break;
+      case 'send':
+        commandText = 'Sending email';
+        break;
+      case 'cancel':
+        commandText = 'Discarding email';
+        break;
+      case 'clear':
+        commandText = `Clearing ${details}`;
+        break;
+      default:
+        commandText = 'Executed command';
+    }
+    
+    // Send to popup
+    chrome.runtime.sendMessage({
+      action: 'commandExecuted',
+      command: commandText
+    });
+  }
+
   processCommand(command) {
     // Store last command for context-aware commands
     this.lastCommand = command;
@@ -408,42 +444,61 @@ class GmailCommandHandler {
     
     // Handle compose actions
     if (this.isComposeCommand(lowerCommand)) {
+      const recipient = this.extractRecipient(lowerCommand);
       this.handleComposeCommand(lowerCommand);
+      this.notifyCommandExecuted('compose', recipient);
       return;
     }
     
     // Handle subject actions
     if (this.isSubjectCommand(lowerCommand)) {
+      const subject = this.extractSubject(lowerCommand);
       this.handleSubjectCommand(lowerCommand);
+      this.notifyCommandExecuted('subject', subject);
       return;
     }
     
     // Handle body content actions
     if (this.isBodyCommand(lowerCommand)) {
       this.handleBodyCommand(lowerCommand);
+      this.notifyCommandExecuted('body');
       return;
     }
     
     // Handle send actions
     if (this.isSendCommand(lowerCommand)) {
       this.handleSendCommand();
+      this.notifyCommandExecuted('send');
       return;
     }
     
     // Handle cancel actions
     if (this.isCancelCommand(lowerCommand)) {
       this.handleCancelCommand();
+      this.notifyCommandExecuted('cancel');
       return;
     }
     
     // Handle commands to clear/edit fields
     if (this.isClearCommand(lowerCommand)) {
+      let clearTarget = '';
+      if (lowerCommand.includes('subject')) clearTarget = 'subject';
+      else if (lowerCommand.includes('body') || lowerCommand.includes('message')) clearTarget = 'message';
+      else if (lowerCommand.includes('recipient') || lowerCommand.includes('to')) clearTarget = 'recipient';
+      
       this.handleClearCommand(lowerCommand);
+      this.notifyCommandExecuted('clear', clearTarget);
       return;
     }
     
     console.log('Command not recognized:', command);
     this.showNotification('Command not recognized: ' + command, 'error');
+    
+    // Send unrecognized command notification
+    chrome.runtime.sendMessage({
+      action: 'commandExecuted',
+      command: 'Command not recognized'
+    });
   }
   
   // Command detection methods

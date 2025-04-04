@@ -1,17 +1,6 @@
 // Listen for installation
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Mail Agent extension installed');
-  
-  // Initialize default settings if not already set
-  chrome.storage.sync.get({
-    language: 'en-US',
-    autoStart: false,
-    showNotifications: true,
-    notificationDuration: 3,
-    contacts: []
-  }, function(items) {
-    chrome.storage.sync.set(items);
-  });
 });
 
 // Add a context menu item for direct access
