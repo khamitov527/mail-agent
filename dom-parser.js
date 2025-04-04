@@ -1,14 +1,24 @@
 /**
  * DOM Parser for Voice Command Chrome Extension
  * Finds all interactive elements in the page and prepares them to be sent with the voice prompt to OpenAI.
+ * Optimized for token efficiency by only extracting essential metadata.
  */
 
 class DOMParser {
+  static lastExtractedElements = null;
+  static mutationObserver = null;
+  static isObserving = false;
+  
   /**
-   * Get all interactive elements on the page
-   * @returns {Array} Array of element objects with extracted attributes
+   * Get all actionable elements on the page with minimal metadata
+   * @returns {Array} Array of lightweight element objects with essential attributes
    */
-  static getInteractiveElements() {
+  static getActionableElements() {
+    // If we have cached elements and no DOM changes have occurred, return the cache
+    if (this.lastExtractedElements && this.isObserving) {
+      return this.lastExtractedElements;
+    }
+    
     // Define common selectors for interactive elements.
     const selectors = [
       'button',
@@ -26,25 +36,182 @@ class DOMParser {
     // Filter elements that are not visible.
     elements = elements.filter(el => {
       const style = window.getComputedStyle(el);
-      return el.offsetParent !== null && style.visibility !== 'hidden' && style.display !== 'none';
+      const isVisible = el.offsetParent !== null && 
+                        style.visibility !== 'hidden' && 
+                        style.display !== 'none' &&
+                        el.offsetWidth > 0 && 
+                        el.offsetHeight > 0;
+      return isVisible;
     });
 
-    // Map the elements to an object containing useful attributes.
-    return elements.map((el, index) => ({
-      element: el,
-      index,
-      tag: el.tagName.toLowerCase(),
-      role: el.getAttribute('role'),
-      ariaLabel: el.getAttribute('aria-label'),
-      innerText: el.innerText.trim(),
-      title: el.getAttribute('title'),
-      placeholder: el.getAttribute('placeholder'),
-      classList: el.className,
-      id: el.id,
-      name: el.getAttribute('name'),
-      href: el.getAttribute('href'),
-      selector: this.generateUniqueSelector(el)
-    }));
+    // Group elements by section if possible
+    const groupedElements = elements.map(el => {
+      const section = this.getElementSection(el);
+      return {
+        el,
+        section
+      };
+    });
+
+    // Map the elements to a lightweight object containing only essential attributes
+    this.lastExtractedElements = groupedElements.map(({ el, section }) => {
+      // Truncate innerText to max 50 chars
+      const innerText = el.innerText?.trim().substring(0, 50) || '';
+      
+      return {
+        tag: el.tagName,
+        text: innerText,
+        id: el.id || null,
+        class: el.className || null,
+        type: el.getAttribute('type') || null,
+        name: el.getAttribute('name') || null,
+        role: el.getAttribute('role') || null,
+        'aria-label': el.getAttribute('aria-label') || null,
+        section: section || null,
+        idx: this.generateElementIndex(el) // Used for action execution
+      };
+    });
+
+    // Start observing DOM mutations if not already
+    if (!this.isObserving) {
+      this.startObservingDOMChanges();
+    }
+
+    return this.lastExtractedElements;
+  }
+  
+  /**
+   * Get the section of an element using closest
+   * @param {Element} el - DOM element
+   * @returns {String|null} - Section name if found
+   */
+  static getElementSection(el) {
+    // Try to find which section the element belongs to
+    const sectionElements = [
+      { selector: 'header, [role="banner"]', name: 'header' },
+      { selector: 'nav, [role="navigation"]', name: 'navigation' },
+      { selector: 'main, [role="main"]', name: 'main' },
+      { selector: 'aside, [role="complementary"]', name: 'sidebar' },
+      { selector: 'footer, [role="contentinfo"]', name: 'footer' },
+      { selector: 'form', name: 'form' },
+      { selector: 'section, article', name: 'content' }
+    ];
+    
+    for (const { selector, name } of sectionElements) {
+      if (el.closest(selector)) {
+        return name;
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Generate a unique index for each element to reference it later
+   * @param {Element} el - DOM element
+   * @returns {String} - Unique reference
+   */
+  static generateElementIndex(el) {
+    // Create a simple index based on tag and position
+    const elements = Array.from(document.querySelectorAll(el.tagName));
+    const index = elements.indexOf(el);
+    return `${el.tagName.toLowerCase()}:${index}`;
+  }
+  
+  /**
+   * Set up a MutationObserver to watch for DOM changes
+   */
+  static startObservingDOMChanges() {
+    // Clear any existing observer
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+    }
+    
+    // Create a new observer
+    this.mutationObserver = new MutationObserver((mutations) => {
+      // Check if the mutations affect relevant elements
+      const relevantChanges = mutations.some(mutation => {
+        // Check for added/removed nodes
+        if (mutation.type === 'childList' && 
+            (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
+          return true;
+        }
+        
+        // Check for attribute changes on interactive elements
+        if (mutation.type === 'attributes') {
+          const target = mutation.target;
+          const isActionable = target.tagName === 'BUTTON' || 
+                               target.tagName === 'A' ||
+                               target.tagName === 'INPUT' ||
+                               target.hasAttribute('role') ||
+                               target.hasAttribute('tabindex');
+          return isActionable;
+        }
+        
+        return false;
+      });
+      
+      if (relevantChanges) {
+        // Invalidate cache
+        this.lastExtractedElements = null;
+        console.log('DOM changes detected, element cache invalidated');
+      }
+    });
+    
+    // Start observing
+    this.mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'disabled', 'hidden']
+    });
+    
+    this.isObserving = true;
+    console.log('DOM mutation observer started');
+  }
+  
+  /**
+   * Stop observing DOM changes
+   */
+  static stopObservingDOMChanges() {
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+      this.mutationObserver = null;
+      this.isObserving = false;
+      console.log('DOM mutation observer stopped');
+    }
+  }
+  
+  /**
+   * Format actionable elements for sending with prompt to OpenAI
+   * @param {String} prompt - The user's voice prompt
+   * @returns {Object} Formatted data with prompt and actionable elements
+   */
+  static formatPromptWithElements(prompt) {
+    const elements = this.getActionableElements();
+    
+    return {
+      prompt,
+      actionElements: elements,
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
+      pageTitle: document.title
+    };
+  }
+  
+  /**
+   * Find element by its generated index
+   * @param {String} idx - Element index (e.g. "button:3")
+   * @returns {Element|null} - The DOM element or null if not found
+   */
+  static findElementByIndex(idx) {
+    if (!idx) return null;
+    
+    const [tagName, index] = idx.split(':');
+    if (!tagName || index === undefined) return null;
+    
+    const elements = Array.from(document.querySelectorAll(tagName.toUpperCase()));
+    return elements[parseInt(index)] || null;
   }
   
   /**
@@ -54,13 +221,14 @@ class DOMParser {
    * @returns {HTMLElement|null} - The matched element or null if not found.
    */
   static findElementByRoleAndName(role, name) {
-    const candidates = this.getInteractiveElements();
-    // Filter by role (either from the role attribute or inferred from tag names).
+    const candidates = this.getActionableElements();
+    
+    // Filter by role
     const matches = candidates.filter(candidate => {
       if (candidate.role) {
         return candidate.role.toLowerCase() === role.toLowerCase();
       } else {
-        // Fallback based on tag names.
+        // Fallback based on tag names
         if (role.toLowerCase() === 'button' && candidate.tag.toLowerCase() === 'button') return true;
         if (role.toLowerCase() === 'link' && candidate.tag.toLowerCase() === 'a') return true;
         if (role.toLowerCase() === 'input' && candidate.tag.toLowerCase() === 'input') return true;
@@ -70,122 +238,15 @@ class DOMParser {
       return false;
     });
 
-    // Further filter by checking if any text attributes include the provided name.
+    // Further filter by checking if any text attributes include the provided name
     const textMatches = matches.filter(candidate => {
-      const combinedText = [candidate.ariaLabel, candidate.title, candidate.innerText, candidate.placeholder]
-        .filter(Boolean)
-        .join(' ');
-      return combinedText.toLowerCase().includes(name.toLowerCase());
+      const textToCheck = candidate.text || '';
+      const ariaLabel = candidate['aria-label'] || '';
+      return textToCheck.toLowerCase().includes(name.toLowerCase()) || 
+             ariaLabel.toLowerCase().includes(name.toLowerCase());
     });
 
-    return textMatches.length > 0 ? textMatches[0].element : null;
-  }
-  
-  /**
-   * Generate a specific CSS selector for an element
-   * @param {Element} element - DOM element
-   * @returns {String} CSS selector string
-   */
-  static generateUniqueSelector(element) {
-    // Try using ID if available
-    if (element.id) {
-      return `#${element.id}`;
-    }
-    
-    // For inputs with name attributes
-    if (element.name && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT')) {
-      return `${element.tagName.toLowerCase()}[name="${element.name}"]`;
-    }
-    
-    // For elements with type attributes (inputs)
-    if (element.type && (element.tagName === 'INPUT')) {
-      if (element.placeholder) {
-        return `input[type="${element.type}"][placeholder="${element.placeholder}"]`;
-      }
-      return `input[type="${element.type}"]`;
-    }
-    
-    // For buttons with text
-    if ((element.tagName === 'BUTTON' || element.getAttribute('role') === 'button') && element.textContent.trim()) {
-      // Instead of using :contains, we'll create a data attribute selector
-      // and let our executeAction method handle finding by text
-      return `${element.tagName.toLowerCase()}`;
-    }
-    
-    // For links with text
-    if (element.tagName === 'A' && element.textContent.trim()) {
-      // Instead of using :contains, we'll create a simple tag selector
-      // and let our executeAction method handle finding by text
-      return `a`;
-    }
-    
-    // For elements with aria attributes
-    if (element.getAttribute('aria-label')) {
-      return `[aria-label="${element.getAttribute('aria-label')}"]`;
-    }
-    
-    // For elements with role
-    if (element.getAttribute('role')) {
-      return `[role="${element.getAttribute('role')}"]`;
-    }
-    
-    // For elements with title
-    if (element.getAttribute('title')) {
-      return `[title="${element.getAttribute('title')}"]`;
-    }
-    
-    // For elements with specific classes that might be useful
-    if (element.classList.length > 0) {
-      // Check if there's a non-generated class (no numbers or very long hashes)
-      const usefulClasses = Array.from(element.classList).filter(cls => 
-        !cls.match(/^\d/) && // Doesn't start with a number
-        !cls.match(/^[a-z0-9]{8,}$/i) && // Not a hash-like class
-        cls.length < 30 // Not too long
-      );
-      
-      if (usefulClasses.length > 0) {
-        return `.${usefulClasses.join('.')}`;
-      }
-    }
-    
-    // Fallback to tag name with all classes, even if not ideal
-    let selector = element.tagName.toLowerCase();
-    if (element.classList.length > 0) {
-      selector += `.${Array.from(element.classList).join('.')}`;
-    }
-    
-    return selector;
-  }
-  
-  /**
-   * Check if an element is visible in the viewport
-   * @param {Element} element - DOM element
-   * @returns {Boolean} True if element is visible
-   */
-  static isElementVisible(element) {
-    const style = window.getComputedStyle(element);
-    return style.display !== 'none' && 
-           style.visibility !== 'hidden' && 
-           style.opacity !== '0' &&
-           element.offsetWidth > 0 &&
-           element.offsetHeight > 0;
-  }
-  
-  /**
-   * Format interactive elements for sending with prompt to OpenAI
-   * @param {String} prompt - The user's voice prompt
-   * @returns {Object} Formatted data with prompt and actionable elements
-   */
-  static formatPromptWithElements(prompt) {
-    const elements = this.getInteractiveElements();
-    
-    return {
-      prompt,
-      actionElements: elements,
-      timestamp: new Date().toISOString(),
-      url: window.location.href,
-      pageTitle: document.title
-    };
+    return textMatches.length > 0 ? this.findElementByIndex(textMatches[0].idx) : null;
   }
   
   /**
@@ -432,6 +493,20 @@ class DOMParser {
         error: error.message
       });
     }
+  }
+
+  /**
+   * Check if an element is visible in the viewport
+   * @param {Element} element - DOM element
+   * @returns {Boolean} True if element is visible
+   */
+  static isElementVisible(element) {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && 
+           style.visibility !== 'hidden' && 
+           style.opacity !== '0' &&
+           element.offsetWidth > 0 &&
+           element.offsetHeight > 0;
   }
 
   /**

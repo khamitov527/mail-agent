@@ -51,6 +51,19 @@ class OpenAIService {
       The user will provide a voice command, and you need to determine which action to take based on the available 
       interactive elements on the page. You should respond with a JSON object containing the action to perform.
       
+      ELEMENT STRUCTURE:
+      Each element in the provided list has the following properties:
+      - tag: HTML tag name (e.g., "BUTTON", "A", "INPUT")
+      - text: Inner text content (truncated to 50 chars)
+      - id: Element ID if available
+      - class: CSS class names
+      - type: Element type attribute (especially for inputs)
+      - name: Name attribute
+      - role: ARIA role
+      - aria-label: ARIA label for accessibility
+      - section: Which section of the page contains this element (header, navigation, main, etc.)
+      - idx: A unique identifier for the element
+      
       IMPORTANT RULES FOR ALL WEBSITES:
       1. Be as specific as possible with selectors - use IDs, class names, roles, and text content when available.
       2. When multiple elements match a generic selector like "[role='button']", provide an "index" property to specify which one.
@@ -60,6 +73,7 @@ class OpenAIService {
       6. For input fields, use specific selectors like input types, names, or placeholder text.
       7. If you can't find an exact match, recommend the closest possible element and explain why.
       8. For websites with complex UIs, look for elements with descriptive attributes like aria-label or title.
+      9. Prefer elements based on their section context - elements in the main content area are usually more relevant than footer elements.
       
       SPECIAL TIPS FOR DIFFERENT WEBSITE TYPES:
       1. Email Services (Gmail, Outlook, etc.):
@@ -117,28 +131,38 @@ class OpenAIService {
       `
     };
 
+    // Group elements by section for better context
+    const elementsBySection = {};
+    domElements.forEach(el => {
+      const section = el.section || 'other';
+      if (!elementsBySection[section]) {
+        elementsBySection[section] = [];
+      }
+      elementsBySection[section].push(el);
+    });
+
     // Create a message with the voice command and DOM elements context
     const userMessage = {
       role: "user",
       content: [
         {
           type: "text",
-          text: `Voice command: "${voiceCommand}"\n\nAvailable interactive elements on the page:`
+          text: `Voice command: "${voiceCommand}"\n\nAvailable interactive elements on the page (grouped by section):`
         },
         {
           type: "text",
-          text: JSON.stringify(domElements, null, 2)
+          text: JSON.stringify(elementsBySection, null, 2)
         }
       ]
     };
 
-    // Create the payload for the OpenAI API
+    // Create the payload for the OpenAI API with reduced max tokens
     return {
       model: this.model,
       messages: [systemMessage, userMessage],
       response_format: { type: "json_object" },
       temperature: 0.2,
-      max_tokens: 1000,
+      max_tokens: 800, // Reduced from 1000 for additional token savings
     };
   }
 

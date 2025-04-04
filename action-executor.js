@@ -28,12 +28,12 @@ class ActionExecutor {
     try {
       console.log(`Processing voice command: "${voiceCommand}"`);
       
-      // 1. Get interactive DOM elements
-      const interactiveElements = this.domParser.getInteractiveElements();
-      console.log(`Found ${interactiveElements.length} interactive elements`);
+      // 1. Get actionable DOM elements (using new lightweight format)
+      const actionableElements = this.domParser.getActionableElements();
+      console.log(`Found ${actionableElements.length} actionable elements`);
       
       // 2. Send voice command and elements to OpenAI
-      const actionPlan = await this.openAIService.processCommand(voiceCommand, interactiveElements);
+      const actionPlan = await this.openAIService.processCommand(voiceCommand, actionableElements);
       console.log('OpenAI returned action plan:', JSON.stringify(actionPlan, null, 2));
       
       // 3. Handle "No action" case
