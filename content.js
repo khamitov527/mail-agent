@@ -17,6 +17,8 @@ class GmailCommandHandler {
     };
     this.recognition = null;
     this.recognitionTimeout = null;
+    this.modal = null;
+    this.modalTranscript = null;
   }
 
   setupMessageListeners() {
@@ -43,6 +45,10 @@ class GmailCommandHandler {
           this.settings = message.settings;
         }
         this.startSpeechRecognition();
+        // Create the modal UI if it doesn't exist
+        if (!document.querySelector('.vesper-modal')) {
+          this.createModal();
+        }
         // Send response to confirm
         sendResponse({status: 'started'});
         return true;
@@ -63,6 +69,289 @@ class GmailCommandHandler {
       }
       
       return true;
+    });
+  }
+
+  // Create a draggable modal for persistent UI
+  createModal() {
+    // Check if modal already exists
+    if (this.modal) {
+      return;
+    }
+    
+    const mainColor = this.settings.mainColor || '#4169E1'; // Royal Blue
+    const agentName = this.settings.agentName || 'Vesper';
+    
+    // Create modal container
+    this.modal = document.createElement('div');
+    this.modal.className = 'vesper-modal';
+    this.modal.style.cssText = `
+      position: fixed;
+      top: 50px;
+      right: 20px;
+      width: 280px;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      z-index: 9999;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      display: flex;
+      flex-direction: column;
+      transition: opacity 0.3s ease;
+    `;
+    
+    // Create modal header (draggable part)
+    const modalHeader = document.createElement('div');
+    modalHeader.className = 'vesper-modal-header';
+    modalHeader.style.cssText = `
+      padding: 15px;
+      background-color: ${mainColor};
+      color: white;
+      font-weight: 300;
+      cursor: move;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      letter-spacing: 0.5px;
+    `;
+    
+    // Add logo and title container
+    const titleContainer = document.createElement('div');
+    titleContainer.style.cssText = `
+      display: flex;
+      align-items: center;
+    `;
+    
+    // Add logo
+    const logo = document.createElement('div');
+    logo.className = 'vesper-logo';
+    logo.style.cssText = `
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background-color: white;
+      color: ${mainColor};
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 500;
+      margin-right: 10px;
+    `;
+    logo.textContent = 'V';
+    
+    // Add title
+    const title = document.createElement('span');
+    title.style.cssText = `
+      font-size: 16px;
+    `;
+    title.textContent = agentName;
+    
+    titleContainer.appendChild(logo);
+    titleContainer.appendChild(title);
+    modalHeader.appendChild(titleContainer);
+    
+    // Add audio wave animation container
+    const waveContainer = document.createElement('div');
+    waveContainer.className = 'vesper-wave-container';
+    waveContainer.style.cssText = `
+      display: flex;
+      align-items: center;
+      height: 20px;
+      margin-right: 15px;
+    `;
+    
+    // Create the audio waves
+    for (let i = 0; i < 4; i++) {
+      const wave = document.createElement('div');
+      wave.className = 'vesper-wave';
+      wave.style.cssText = `
+        width: 3px;
+        height: ${4 + i * 4}px;
+        margin: 0 2px;
+        background-color: white;
+        border-radius: 1px;
+        animation: vesperWave 1.2s ease-in-out infinite;
+        animation-delay: ${i * 0.15}s;
+        opacity: 0;
+      `;
+      waveContainer.appendChild(wave);
+    }
+    
+    // Add the wave animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes vesperWave {
+        0%, 100% { height: 4px; opacity: 0.3; }
+        50% { height: 16px; opacity: 1; }
+      }
+      
+      @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      
+      .vesper-modal-transcript::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .vesper-modal-transcript::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+      }
+      
+      .vesper-modal-transcript::-webkit-scrollbar-thumb {
+        background: #ddd;
+        border-radius: 3px;
+      }
+      
+      .vesper-modal-transcript::-webkit-scrollbar-thumb:hover {
+        background: #ccc;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    modalHeader.appendChild(waveContainer);
+    
+    // Create close button
+    const closeButton = document.createElement('button');
+    closeButton.className = 'vesper-modal-close';
+    closeButton.style.cssText = `
+      border: none;
+      background: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    `;
+    closeButton.innerHTML = '×';
+    closeButton.title = 'Close';
+    
+    closeButton.addEventListener('mouseover', () => {
+      closeButton.style.opacity = '1';
+    });
+    
+    closeButton.addEventListener('mouseout', () => {
+      closeButton.style.opacity = '0.8';
+    });
+    
+    closeButton.addEventListener('click', () => {
+      this.stopSpeechRecognition();
+      document.body.removeChild(this.modal);
+      this.modal = null;
+      this.modalTranscript = null;
+    });
+    
+    modalHeader.appendChild(closeButton);
+    
+    // Create modal body
+    const modalBody = document.createElement('div');
+    modalBody.className = 'vesper-modal-body';
+    modalBody.style.cssText = `
+      padding: 15px;
+      max-height: 300px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    `;
+    
+    // Create transcript container
+    const transcriptContainer = document.createElement('div');
+    transcriptContainer.className = 'vesper-modal-transcript';
+    transcriptContainer.style.cssText = `
+      max-height: 250px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-right: 5px;
+    `;
+    
+    // Create transcript content
+    this.modalTranscript = document.createElement('div');
+    this.modalTranscript.className = 'vesper-modal-transcript-content';
+    transcriptContainer.appendChild(this.modalTranscript);
+    
+    // Add default message
+    const helpMessage = document.createElement('div');
+    helpMessage.className = 'vesper-modal-help';
+    helpMessage.style.cssText = `
+      color: #666;
+      font-size: 14px;
+      line-height: 1.4;
+      text-align: center;
+      padding: 10px;
+      margin: 20px 0;
+    `;
+    helpMessage.innerHTML = `<div style="margin-bottom:10px;">🎤</div>Say a command like<br><strong style="color:${mainColor};">"compose email to John"</strong>`;
+    this.modalTranscript.appendChild(helpMessage);
+    
+    modalBody.appendChild(transcriptContainer);
+    
+    // Add modal parts to the modal
+    this.modal.appendChild(modalHeader);
+    this.modal.appendChild(modalBody);
+    
+    // Add to document
+    document.body.appendChild(this.modal);
+    
+    // Make the modal draggable
+    this.makeModalDraggable(this.modal, modalHeader);
+    
+    // Start with active waves off
+    this.setWaveAnimation(false);
+  }
+  
+  // Set the wave animation state
+  setWaveAnimation(isActive) {
+    const waves = this.modal?.querySelectorAll('.vesper-wave');
+    if (!waves) return;
+    
+    waves.forEach(wave => {
+      wave.style.opacity = isActive ? '1' : '0';
+    });
+  }
+  
+  // Make the modal draggable
+  makeModalDraggable(modal, handle) {
+    let offsetX = 0;
+    let offsetY = 0;
+    let isDragging = false;
+    
+    handle.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      offsetX = e.clientX - modal.getBoundingClientRect().left;
+      offsetY = e.clientY - modal.getBoundingClientRect().top;
+      
+      modal.style.userSelect = 'none';
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      
+      const x = e.clientX - offsetX;
+      const y = e.clientY - offsetY;
+      
+      // Keep the modal within the viewport
+      const maxX = window.innerWidth - modal.offsetWidth;
+      const maxY = window.innerHeight - modal.offsetHeight;
+      
+      modal.style.left = `${Math.max(0, Math.min(x, maxX))}px`;
+      modal.style.top = `${Math.max(0, Math.min(y, maxY))}px`;
+    });
+    
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+      modal.style.userSelect = '';
     });
   }
 
@@ -118,6 +407,12 @@ class GmailCommandHandler {
     
     this.showNotification('Listening for commands...', 'info');
     
+    // Update modal if it exists
+    if (this.modal) {
+      // Activate the wave animation
+      this.setWaveAnimation(true);
+    }
+    
     // Clear any existing timeout
     if (this.recognitionTimeout) {
       clearTimeout(this.recognitionTimeout);
@@ -172,6 +467,11 @@ class GmailCommandHandler {
           transcript: transcript.trim(),
           isFinal: true
         });
+        
+        // Update modal transcript if it exists
+        if (this.modalTranscript) {
+          this.addToModalTranscript(transcript.trim(), false, false);
+        }
       } else {
         interimTranscript += transcript;
         console.log('Interim transcript:', interimTranscript);
@@ -182,6 +482,11 @@ class GmailCommandHandler {
           transcript: interimTranscript,
           isFinal: false
         });
+        
+        // Update modal transcript with interim result
+        if (this.modalTranscript) {
+          this.addToModalTranscript(interimTranscript, true, false);
+        }
       }
     }
   }
@@ -219,6 +524,11 @@ class GmailCommandHandler {
     }
     
     this.showNotification(errorMessage, 'error');
+    
+    // Update modal if it exists
+    if (this.modalTranscript) {
+      this.addToModalTranscript(`Error: ${errorMessage}`, false, true);
+    }
     
     // Only try to restart on temporary errors
     if (['no-speech', 'aborted', 'network'].includes(event.error) && this.currentState.isListening) {
@@ -260,6 +570,16 @@ class GmailCommandHandler {
         action: 'recognitionStatusChanged',
         isListening: false
       });
+      
+      // Update modal if it exists
+      if (this.modal) {
+        // Deactivate wave animation
+        this.setWaveAnimation(false);
+        
+        if (this.modalTranscript) {
+          this.addToModalTranscript('Stopped listening', false, true);
+        }
+      }
     }
   }
   
@@ -277,6 +597,33 @@ class GmailCommandHandler {
       console.log('Starting speech recognition in content script');
       this.currentState.isListening = true;
       this.recognition.start();
+      
+      // Update modal status if it exists
+      if (this.modal) {
+        // Activate wave animation
+        this.setWaveAnimation(true);
+        
+        // Clear transcript and add helper message
+        if (this.modalTranscript) {
+          this.modalTranscript.innerHTML = '';
+          
+          const mainColor = this.settings.mainColor || '#4169E1'; // Royal Blue
+          
+          const helpMessage = document.createElement('div');
+          helpMessage.className = 'vesper-modal-help';
+          helpMessage.style.cssText = `
+            color: #666;
+            font-size: 14px;
+            line-height: 1.4;
+            text-align: center;
+            padding: 10px;
+            margin: 20px 0;
+          `;
+          helpMessage.innerHTML = `<div style="margin-bottom:10px;">🎤</div>Say a command like<br><strong style="color:${mainColor};">"compose email to John"</strong>`;
+          this.modalTranscript.appendChild(helpMessage);
+        }
+      }
+      
       return true;
     } catch (e) {
       console.error('Error starting speech recognition:', e);
@@ -308,13 +655,23 @@ class GmailCommandHandler {
       isListening: false
     });
     
+    // Update modal status if it exists
+    if (this.modal) {
+      // Deactivate wave animation
+      this.setWaveAnimation(false);
+      
+      if (this.modalTranscript) {
+        this.addToModalTranscript('Stopped listening', false, true);
+      }
+    }
+    
     this.showNotification('Speech recognition stopped', 'info');
   }
 
   setupNotificationSystem() {
     // Create notification container
     this.notificationContainer = document.createElement('div');
-    this.notificationContainer.className = 'mail-agent-notification-container';
+    this.notificationContainer.className = 'vesper-notification-container';
     this.notificationContainer.style.cssText = `
       position: fixed;
       top: 20px;
@@ -331,26 +688,29 @@ class GmailCommandHandler {
       return;
     }
     
+    const mainColor = this.settings.mainColor || '#4169E1'; // Royal Blue
+    
     // Create notification element
     const notification = document.createElement('div');
-    notification.className = `mail-agent-notification mail-agent-notification-${type}`;
+    notification.className = `vesper-notification vesper-notification-${type}`;
     notification.style.cssText = `
-      background-color: ${type === 'error' ? '#ffebee' : '#e8f5e9'};
-      color: ${type === 'error' ? '#c62828' : '#2e7d32'};
-      border-left: 4px solid ${type === 'error' ? '#c62828' : '#2e7d32'};
+      background-color: ${type === 'error' ? '#ffebee' : 'white'};
+      color: ${type === 'error' ? '#d32f2f' : '#333'};
+      border-left: 3px solid ${type === 'error' ? '#d32f2f' : mainColor};
       padding: 12px 16px;
       margin-bottom: 10px;
       border-radius: 4px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      font-family: Arial, sans-serif;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
       font-size: 14px;
+      font-weight: 400;
       opacity: 0;
       transition: opacity 0.3s;
     `;
     
     // Add icon and message
     notification.innerHTML = `
-      <strong>Mail Agent:</strong> ${message}
+      <strong style="color:${type === 'error' ? '#d32f2f' : mainColor};">Vesper:</strong> ${message}
     `;
     
     // Add to container
@@ -435,6 +795,49 @@ class GmailCommandHandler {
       action: 'commandExecuted',
       command: commandText
     });
+    
+    // Add to modal transcript if it exists
+    if (this.modalTranscript) {
+      // Create a command response element (from Vesper)
+      const commandDiv = document.createElement('div');
+      commandDiv.className = 'vesper-modal-response';
+      commandDiv.style.cssText = `
+        background-color: #f5f5f5;
+        color: #333;
+        border-radius: 12px;
+        padding: 12px;
+        margin: 5px 0;
+        font-size: 14px;
+        word-wrap: break-word;
+        max-width: 85%;
+        align-self: flex-start;
+      `;
+      
+      // Add icon based on command type
+      let icon = '';
+      if (commandText.includes('Composing')) {
+        icon = '✉️ ';
+      } else if (commandText.includes('Setting subject')) {
+        icon = '📝 ';
+      } else if (commandText.includes('Setting message')) {
+        icon = '📄 ';
+      } else if (commandText.includes('Sending')) {
+        icon = '📨 ';
+      } else if (commandText.includes('Discarding')) {
+        icon = '🗑️ ';
+      } else if (commandText.includes('Clearing')) {
+        icon = '🧹 ';
+      }
+      
+      commandDiv.textContent = icon + commandText;
+      this.modalTranscript.appendChild(commandDiv);
+      
+      // Ensure scrolling to show the latest content
+      const container = this.modal.querySelector('.vesper-modal-transcript');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
   }
 
   processCommand(command) {
@@ -505,6 +908,33 @@ class GmailCommandHandler {
       action: 'commandExecuted',
       command: 'Command not recognized'
     });
+    
+    // Add to modal transcript if it exists
+    if (this.modalTranscript) {
+      // Create an error response element
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'vesper-modal-error';
+      errorDiv.style.cssText = `
+        background-color: #f5f5f5;
+        color: #d32f2f;
+        border-radius: 12px;
+        padding: 12px;
+        margin: 5px 0;
+        font-size: 14px;
+        word-wrap: break-word;
+        max-width: 85%;
+        align-self: flex-start;
+      `;
+      
+      errorDiv.textContent = `❓ I didn't understand that command`;
+      this.modalTranscript.appendChild(errorDiv);
+      
+      // Ensure scrolling to show the latest content
+      const container = this.modal.querySelector('.vesper-modal-transcript');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
   }
   
   // Command detection methods
@@ -814,6 +1244,91 @@ class GmailCommandHandler {
       }
     } else {
       this.showNotification('Please specify what to clear (subject, body, or recipient)', 'error');
+    }
+  }
+
+  // Add message to the modal transcript
+  addToModalTranscript(text, isInterim = false, isSystem = false) {
+    if (!this.modalTranscript) return;
+    
+    const mainColor = this.settings.mainColor || '#4169E1'; // Royal Blue
+    
+    // Remove any existing interim results
+    const interimElements = this.modalTranscript.querySelectorAll('.vesper-modal-interim');
+    interimElements.forEach(el => el.remove());
+    
+    // Remove the helper message if present
+    const helpElement = this.modalTranscript.querySelector('.vesper-modal-help');
+    if (helpElement) {
+      helpElement.remove();
+    }
+    
+    if (isInterim) {
+      // For interim results, add with special styling
+      const interimDiv = document.createElement('div');
+      interimDiv.className = 'vesper-modal-interim';
+      interimDiv.style.cssText = `
+        color: #666;
+        background-color: #f5f5f5;
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin: 5px 0;
+        font-size: 14px;
+        opacity: 0.8;
+      `;
+      interimDiv.textContent = text;
+      this.modalTranscript.appendChild(interimDiv);
+    } else if (isSystem) {
+      // For system messages (like errors or status)
+      const systemDiv = document.createElement('div');
+      systemDiv.className = 'vesper-modal-system';
+      systemDiv.style.cssText = `
+        color: #666;
+        text-align: center;
+        font-size: 12px;
+        margin: 8px 0;
+        padding: 5px;
+      `;
+      
+      if (text.startsWith('Error:')) {
+        systemDiv.style.color = '#d32f2f';
+      }
+      
+      systemDiv.textContent = text;
+      this.modalTranscript.appendChild(systemDiv);
+    } else {
+      // For regular user speech
+      const speechDiv = document.createElement('div');
+      speechDiv.className = 'vesper-modal-speech';
+      speechDiv.style.cssText = `
+        background-color: ${mainColor};
+        color: white;
+        border-radius: 12px;
+        padding: 12px;
+        margin: 5px 0;
+        font-size: 14px;
+        word-wrap: break-word;
+        max-width: 85%;
+        align-self: flex-end;
+      `;
+      
+      speechDiv.textContent = text;
+      this.modalTranscript.appendChild(speechDiv);
+      
+      // Animate the wave when speaking
+      this.setWaveAnimation(true);
+      setTimeout(() => {
+        // Turn off wave animation after a short delay
+        if (this.currentState.isListening) {
+          this.setWaveAnimation(false);
+        }
+      }, 1500);
+    }
+    
+    // Ensure scrolling to show the latest content
+    const container = this.modal.querySelector('.vesper-modal-transcript');
+    if (container) {
+      container.scrollTop = container.scrollHeight;
     }
   }
 }

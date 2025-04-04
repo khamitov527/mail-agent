@@ -1,33 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Mail Agent</title>
+  <title>Vesper</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
-    <h1>Mail Agent</h1>
-    <div class="status-container">
-      <div id="status">Ready</div>
-      <div id="indicator" class="off"></div>
-    </div>
-    <button id="startButton">Start Listening</button>
-    <button id="stopButton" disabled>Stop Listening</button>
-    <div class="transcript-container">
-      <h3>Transcript:</h3>
-      <div id="transcript"></div>
-    </div>
-    <div class="commands-help">
-      <h3>Available Commands:</h3>
-      <ul>
-        <li><strong>Compose:</strong> "Compose email to [name]", "New email to [name]"</li>
-        <li><strong>Subject:</strong> "Subject: [text]", "Subject is [text]"</li>
-        <li><strong>Body:</strong> "Say: [message]", "Message body: [message]"</li>
-        <li><strong>Send:</strong> "Send", "Send the email", "Okay, send it"</li>
-        <li><strong>Cancel:</strong> "Cancel", "Nevermind", "Discard email"</li>
-        <li><strong>Control:</strong> "Delete subject", "Clear body"</li>
-      </ul>
-    </div>
+    <div class="logo">V</div>
+    <h1>Vesper</h1>
+    <button id="launchButton">Launch</button>
   </div>
   <script src="popup.js"></script>
 </body>
