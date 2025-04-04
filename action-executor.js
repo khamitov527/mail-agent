@@ -173,7 +173,7 @@ class ActionExecutor {
       console.log('Executing action:', JSON.stringify(action, null, 2));
       
       // Handle different action formats
-      let selector, type, value, index;
+      let selector, type, value, index, role, name;
       
       if (typeof action === 'string') {
         // Simple string action (unlikely but handled for completeness)
@@ -186,6 +186,8 @@ class ActionExecutor {
         type = action.action.type;
         value = action.action.value;
         index = action.action.index;
+        role = action.action.role;
+        name = action.action.name;
       } else if (action.action && typeof action.action === 'string') {
         // Format: { action: 'click', selector: '#some-button', value: null }
         console.log('Processing object with action string');
@@ -193,6 +195,8 @@ class ActionExecutor {
         type = action.action;
         value = action.value;
         index = action.index;
+        role = action.role;
+        name = action.name;
       } else {
         // Standard format: { type: 'click', selector: '#some-button', value: null }
         console.log('Processing standard action object');
@@ -200,20 +204,23 @@ class ActionExecutor {
         type = action.type;
         value = action.value;
         index = action.index;
+        role = action.role;
+        name = action.name;
       }
       
-      console.log(`Action details - Type: ${type}, Selector: ${selector}, Value: ${value}${index !== undefined ? `, Index: ${index}` : ''}`);
+      console.log(`Action details - Type: ${type}, Selector: ${selector}, Value: ${value}${index !== undefined ? `, Index: ${index}` : ''}${role ? `, Role: ${role}` : ''}${name ? `, Name: ${name}` : ''}`);
       
-      if (!selector || !type) {
-        throw new Error('Invalid action: missing selector or type');
+      // Allow actions with just role and name (no selector required)
+      if ((!selector && !(role && name)) || !type) {
+        throw new Error('Invalid action: missing selector/identifier or type');
       }
       
       // Execute the action on the DOM element
-      console.log(`Attempting to execute "${type}" on selector "${selector}"${index !== undefined ? ` at index ${index}` : ''}`);
-      const result = await this.domParser.executeAction(selector, type, value, index);
+      console.log(`Attempting to execute "${type}"${selector ? ` on selector "${selector}"` : ''}${index !== undefined ? ` at index ${index}` : ''}${role ? ` with role "${role}"` : ''}${name ? ` and name "${name}"` : ''}`);
+      const result = await this.domParser.executeAction(selector, type, value, index, role, name);
       
       if (result.success) {
-        console.log(`Executed action: ${type} on ${selector} - Success`, result);
+        console.log(`Executed action: ${type}${selector ? ` on ${selector}` : ''}${role ? ` with role "${role}"` : ''}${name ? ` and name "${name}"` : ''} - Success`, result);
         
         // Check for warning about no visible changes
         if (result.warning) {
