@@ -3,7 +3,7 @@
   "name": "Mail Agent",
   "version": "1.0",
   "description": "Voice-controlled email assistant for Gmail",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": ["activeTab", "storage", "scripting", "audioCapture", "notifications", "contextMenus"],
   "host_permissions": ["*://mail.google.com/*"],
   "background": {
     "service_worker": "background.js"

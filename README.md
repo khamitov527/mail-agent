@@ -7,6 +7,9 @@ A Chrome extension that allows you to compose and send emails in Gmail using voi
 - **Voice-activated email composition**: Speak commands to create and send emails without typing
 - **Simple command recognition**: Uses keyword matching to understand your intent
 - **Gmail integration**: Works directly with Gmail's interface
+- **Visual feedback**: Microphone visualization and status indicators
+- **Smart context awareness**: Opens compose window automatically when needed
+- **Customizable settings**: Change language, configure notifications, and save contacts
 
 ## Installation
 
@@ -27,20 +30,32 @@ The extension recognizes the following voice commands:
 - "New email to [name/email]"
 - "Send email to [name/email]"
 - "Write message to [name/email]"
+- "Compose to [name/email]"
+- "Email to [name/email]"
+- "Write to [name/email]"
 
 ### Subject Line
 - "Subject: [your subject line]"
 - "Subject is [your subject line]"
 - "Add subject: [your subject line]"
+- "Set subject: [your subject line]"
+- "Set subject to [your subject line]"
 
 ### Email Body
 - "Say: [your message content]"
 - "Message body: [your message content]"
 - "Body says: [your message content]"
+- "Add message: [your message content]"
+- "Type: [your message content]"
+- "Write: [your message content]"
 
 ### Send Command
 - "Send"
 - "Send the email"
+- "Send it"
+- "Send now"
+- "Send this"
+- "Send message"
 - "Okay, send it"
 - "Go ahead and send"
 
@@ -48,6 +63,18 @@ The extension recognizes the following voice commands:
 - "Cancel"
 - "Nevermind"
 - "Discard email"
+- "Discard"
+- "Close email"
+- "Delete draft"
+
+### Clear/Edit Commands
+- "Clear subject"
+- "Clear body"
+- "Clear message"
+- "Clear recipient"
+- "Delete subject"
+- "Delete body"
+- "Remove recipient"
 
 ## Usage
 
@@ -56,6 +83,21 @@ The extension recognizes the following voice commands:
 3. Click "Start Listening" to begin voice recognition
 4. Speak your commands clearly (the transcript will show what was recognized)
 5. Click "Stop Listening" when you're done
+
+## Smart Features
+
+- **Contact management**: Add contacts in settings to use their names instead of typing email addresses
+- **Context awareness**: Commands for subject and body will automatically open a compose window if needed
+- **Audio visualization**: Visual feedback shows when your microphone is detecting sound
+- **Multiple command variations**: Recognize different ways of expressing the same intent
+
+## Customization
+
+Access the settings page to:
+- Change speech recognition language
+- Enable/disable automatic listening on startup
+- Configure notification settings
+- Add frequently used contacts
 
 ## Limitations
 

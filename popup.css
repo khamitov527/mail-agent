@@ -32,14 +32,18 @@ h1 {
   height: 12px;
   border-radius: 50%;
   display: inline-block;
+  transition: transform 0.1s ease-in-out, background-color 0.3s;
 }
 
 #indicator.off {
   background-color: #d93025;
+  transform: scale(1);
 }
 
 #indicator.on {
   background-color: #34a853;
+  transform: scale(1);
+  box-shadow: 0 0 5px rgba(52, 168, 83, 0.7);
 }
 
 button {
@@ -50,27 +54,44 @@ button {
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
+  transition: background-color 0.2s, transform 0.1s;
 }
 
 button:hover {
   background-color: #174ea6;
 }
 
+button:active {
+  transform: scale(0.98);
+}
+
 button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+  transform: none;
 }
 
 .transcript-container {
   border: 1px solid #ccc;
   border-radius: 4px;
   padding: 10px;
-  max-height: 120px;
+  max-height: 150px;
   overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 #transcript {
   min-height: 60px;
+}
+
+#transcript i {
+  color: #666;
+  font-style: italic;
+}
+
+#transcript b {
+  color: #1a73e8;
 }
 
 .commands-help {
@@ -79,6 +100,12 @@ button:disabled {
   padding: 5px 10px;
   font-size: 0.9em;
   background-color: #f8f9fa;
+}
+
+.commands-help h3 {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  color: #1a73e8;
 }
 
 .commands-help ul {
