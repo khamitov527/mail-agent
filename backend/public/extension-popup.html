@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Email Commands</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 350px;
+      margin: 0;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .logo {
+      font-size: 24px;
+      margin-right: 10px;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0;
+    }
+    .status {
+      margin: 10px 0;
+      padding: 8px;
+      border-radius: 4px;
+    }
+    .status.connected {
+      background-color: #e7f5ea;
+      color: #2e7d32;
+    }
+    .status.disconnected {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+    .status.loading {
+      background-color: #e3f2fd;
+      color: #0d47a1;
+    }
+    .voice-input {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .voice-btn {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      font-size: 20px;
+      cursor: pointer;
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .voice-btn:disabled {
+      background-color: #9e9e9e;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    .voice-btn:hover:not(:disabled) {
+      background-color: #2a75f3;
+    }
+    .voice-btn.recording {
+      background-color: #ea4335;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .voice-status {
+      font-size: 14px;
+    }
+    .manual-test {
+      margin-top: 16px;
+    }
+    textarea {
+      width: 100%;
+      height: 60px;
+      margin-bottom: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 8px;
+      font-family: Arial, sans-serif;
+      resize: none;
+    }
+    .test-btn {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .test-btn:disabled {
+      background-color: #9e9e9e;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    .test-btn:hover:not(:disabled) {
+      background-color: #2a75f3;
+    }
+    .results {
+      margin-top: 16px;
+      border-top: 1px solid #eee;
+      padding-top: 16px;
+    }
+    .result-item {
+      margin-bottom: 8px;
+    }
+    .result-label {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .result-content {
+      background-color: #f5f5f5;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      word-break: break-word;
+    }
+    .commands {
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    .examples {
+      margin-top: 16px;
+      border-top: 1px solid #eee;
+      padding-top: 16px;
+    }
+    .example {
+      cursor: pointer;
+      color: #4285f4;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .example:hover {
+      text-decoration: underline;
+    }
+    .feedback {
+      margin-top: 16px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      display: none;
+    }
+    .feedback.error {
+      background-color: #ffebee;
+      color: #c62828;
+      display: block;
+    }
+    .feedback.success {
+      background-color: #e7f5ea;
+      color: #2e7d32;
+      display: block;
+    }
+    .feedback.warning {
+      background-color: #fff8e1;
+      color: #ff8f00;
+      display: block;
+    }
+    footer {
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+      margin-top: 16px;
+      border-top: 1px solid #eee;
+      padding-top: 8px;
+    }
+    .help-btn {
+      font-size: 11px;
+      color: #4285f4;
+      cursor: pointer;
+      margin-left: 5px;
+    }
+    .help-content {
+      display: none;
+      margin-top: 10px;
+      padding: 8px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .help-content.visible {
+      display: block;
+    }
+    .reload-btn {
+      color: #4285f4;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🎤</div>
+    <h1>Voice Email Commands</h1>
+  </div>
+  
+  <div id="backend-status" class="status loading">
+    Checking backend connection...
+  </div>
+  
+  <div class="voice-input">
+    <button id="voice-btn" class="voice-btn" disabled>
+      <span>🎤</span>
+    </button>
+    <div class="voice-status" id="voice-status">Click the mic button to speak</div>
+  </div>
+  
+  <div id="feedback" class="feedback"></div>
+  
+  <div class="manual-test">
+    <div class="result-label">Test with text: <span class="help-btn" id="help-btn">?</span></div>
+    <div id="help-content" class="help-content">
+      Try natural language commands like "compose an email to my friend" or use specific commands like "compose email" followed by "add john@example.com as recipient"
+    </div>
+    <textarea id="test-input" placeholder="Type a voice command to test, e.g. 'compose an email to john with subject meeting notes'"></textarea>
+    <button id="test-btn" class="test-btn" disabled>Process Command</button>
+  </div>
+  
+  <div class="results" id="results" style="display: none;">
+    <div class="result-item">
+      <div class="result-label">Corrected Text:</div>
+      <div class="result-content" id="corrected-text"></div>
+    </div>
+    <div class="result-item">
+      <div class="result-label">Commands:</div>
+      <div class="result-content commands" id="commands"></div>
+    </div>
+  </div>
+  
+  <div class="examples">
+    <div class="result-label">Example commands:</div>
+    <div class="example" data-text="compose an email">compose an email</div>
+    <div class="example" data-text="add john@example.com as recipient">add john@example.com as recipient</div>
+    <div class="example" data-text="set subject to quarterly report">set subject to quarterly report</div>
+    <div class="example" data-text="add message the numbers look good for q3">add message the numbers look good for q3</div>
+    <div class="example" data-text="delete this draft">delete this draft</div>
+    <div class="example" data-text="save and close">save and close</div>
+  </div>
+  
+  <footer>
+    Powered by Voice Processing Backend - http://localhost:3000
+    <span class="reload-btn" id="reload-btn">Reload</span>
+  </footer>
+  
+  <!-- Include the voice processing client library -->
+  <script src="extension-client.js"></script>
+  
+  <!-- Include the extension integration script -->
+  <script src="extension-integration.js"></script>
+  
+  <!-- Popup script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+      // Elements
+      const backendStatus = document.getElementById('backend-status');
+      const voiceBtn = document.getElementById('voice-btn');
+      const voiceStatus = document.getElementById('voice-status');
+      const testInput = document.getElementById('test-input');
+      const testBtn = document.getElementById('test-btn');
+      const resultsSection = document.getElementById('results');
+      const correctedText = document.getElementById('corrected-text');
+      const commandsOutput = document.getElementById('commands');
+      const examples = document.querySelectorAll('.example');
+      const feedback = document.getElementById('feedback');
+      const helpBtn = document.getElementById('help-btn');
+      const helpContent = document.getElementById('help-content');
+      const reloadBtn = document.getElementById('reload-btn');
+      
+      // Show/hide help content
+      helpBtn.addEventListener('click', function() {
+        helpContent.classList.toggle('visible');
+      });
+      
+      // Reload extension
+      reloadBtn.addEventListener('click', function() {
+        chrome.runtime.reload();
+      });
+      
+      // Check if Gmail tab is open
+      async function checkGmailTab() {
+        return new Promise((resolve) => {
+          chrome.tabs.query({ url: '*://mail.google.com/*' }, (tabs) => {
+            resolve(tabs.length > 0);
+          });
+        });
+      }
+      
+      // Show feedback message
+      function showFeedback(message, type = 'error') {
+        feedback.textContent = message;
+        feedback.className = `feedback ${type}`;
+        
+        // Auto-hide success messages after 5 seconds
+        if (type === 'success') {
+          setTimeout(() => {
+            feedback.className = 'feedback';
+          }, 5000);
+        }
+      }
+      
+      // Clear feedback
+      function clearFeedback() {
+        feedback.className = 'feedback';
+      }
+      
+      // Check backend and Gmail status
+      async function checkStatus() {
+        backendStatus.textContent = 'Checking connection...';
+        backendStatus.className = 'status loading';
+        voiceBtn.disabled = true;
+        testBtn.disabled = true;
+        
+        try {
+          // Check if Gmail is open
+          const gmailOpen = await checkGmailTab();
+          if (!gmailOpen) {
+            backendStatus.textContent = 'Gmail is not open. Please open Gmail in a tab.';
+            backendStatus.className = 'status disconnected';
+            showFeedback('Please open Gmail in a tab to use voice commands.', 'warning');
+            return false;
+          }
+          
+          // Check backend status via background script
+          const response = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              { action: 'checkBackendStatus' },
+              (response) => resolve(response || { available: false })
+            );
+          });
+          
+          if (response.available) {
+            backendStatus.textContent = 'Connected to backend server';
+            backendStatus.className = 'status connected';
+            voiceBtn.disabled = false;
+            testBtn.disabled = false;
+            clearFeedback();
+            return true;
+          } else {
+            backendStatus.textContent = 'Error connecting to backend server';
+            backendStatus.className = 'status disconnected';
+            showFeedback('Backend server not available. Make sure it is running at http://localhost:3000');
+            return false;
+          }
+        } catch (error) {
+          console.error('Error checking status:', error);
+          backendStatus.textContent = 'Connection error';
+          backendStatus.className = 'status disconnected';
+          showFeedback('Connection error: ' + error.message);
+          return false;
+        }
+      }
+      
+      // Setup speech recognition with error handling
+      let recognition = null;
+      try {
+        if ('webkitSpeechRecognition' in window) {
+          recognition = new webkitSpeechRecognition();
+          recognition.continuous = false;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
+          
+          recognition.onstart = function() {
+            voiceBtn.classList.add('recording');
+            voiceStatus.textContent = 'Listening...';
+            clearFeedback();
+          };
+          
+          recognition.onresult = function(event) {
+            let interimTranscript = '';
+            let finalTranscript = '';
+            
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+              } else {
+                interimTranscript += event.results[i][0].transcript;
+              }
+            }
+            
+            if (finalTranscript) {
+              testInput.value = finalTranscript;
+              processVoiceCommand(finalTranscript);
+            } else if (interimTranscript) {
+              voiceStatus.textContent = 'Hearing: ' + interimTranscript;
+            }
+          };
+          
+          recognition.onerror = function(event) {
+            voiceBtn.classList.remove('recording');
+            
+            if (event.error === 'not-allowed') {
+              voiceStatus.textContent = 'Microphone access denied';
+              showFeedback('Please allow microphone access to use voice commands', 'warning');
+            } else if (event.error === 'no-speech') {
+              voiceStatus.textContent = 'No speech detected';
+              showFeedback('No speech detected. Please try again.', 'warning');
+            } else {
+              voiceStatus.textContent = 'Error: ' + event.error;
+              showFeedback('Speech recognition error: ' + event.error, 'error');
+            }
+          };
+          
+          recognition.onend = function() {
+            voiceBtn.classList.remove('recording');
+            voiceStatus.textContent = 'Click the mic button to speak';
+          };
+        } else {
+          voiceStatus.textContent = 'Speech recognition not supported in this browser';
+          voiceBtn.disabled = true;
+          showFeedback('Speech recognition is not supported in this browser. Try using Chrome.', 'warning');
+        }
+      } catch (error) {
+        console.error('Error setting up speech recognition:', error);
+        voiceStatus.textContent = 'Speech recognition error';
+        voiceBtn.disabled = true;
+        showFeedback('Error setting up speech recognition: ' + error.message, 'error');
+      }
+      
+      // Voice button click handler
+      voiceBtn.addEventListener('click', function() {
+        if (recognition && !voiceBtn.disabled) {
+          try {
+            recognition.start();
+          } catch (error) {
+            console.error('Error starting speech recognition:', error);
+            showFeedback('Error starting speech recognition: ' + error.message, 'error');
+          }
+        }
+      });
+      
+      // Test button click handler
+      testBtn.addEventListener('click', function() {
+        const text = testInput.value.trim();
+        if (text) {
+          processVoiceCommand(text);
+        } else {
+          showFeedback('Please enter a command', 'warning');
+        }
+      });
+      
+      // Example click handlers
+      examples.forEach(example => {
+        example.addEventListener('click', function() {
+          const text = this.getAttribute('data-text');
+          testInput.value = text;
+        });
+      });
+      
+      // Process voice command with better error handling
+      async function processVoiceCommand(transcript) {
+        clearFeedback();
+        voiceStatus.textContent = 'Processing...';
+        
+        try {
+          // Check status first
+          const statusOk = await checkStatus();
+          if (!statusOk) {
+            return;
+          }
+          
+          // Send to background script
+          chrome.runtime.sendMessage(
+            { 
+              action: 'processVoice', 
+              transcript: transcript 
+            },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                showFeedback('Error: ' + chrome.runtime.lastError.message, 'error');
+                voiceStatus.textContent = 'Error processing command';
+                return;
+              }
+              
+              if (response && response.success) {
+                voiceStatus.textContent = 'Command processed successfully';
+                
+                // Get the result by directly querying the backend
+                fetch('http://localhost:3000/api/voice-processing', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ rawTranscript: transcript }),
+                })
+                .then(res => res.json())
+                .then(result => {
+                  // Display results
+                  correctedText.textContent = result.corrected;
+                  commandsOutput.textContent = JSON.stringify(result.commands, null, 2);
+                  resultsSection.style.display = 'block';
+                  
+                  if (result.commands && result.commands.length > 0) {
+                    showFeedback(`Successfully processed ${result.commands.length} command(s)`, 'success');
+                  } else {
+                    showFeedback('No commands were detected in your input', 'warning');
+                  }
+                })
+                .catch(err => {
+                  console.error('Error fetching results:', err);
+                });
+              } else {
+                voiceStatus.textContent = 'Error processing command';
+                showFeedback('Error: ' + (response?.error || 'Unknown error'), 'error');
+              }
+            }
+          );
+        } catch (error) {
+          voiceStatus.textContent = 'Error processing command';
+          showFeedback('Error: ' + error.message, 'error');
+          console.error('Error processing command:', error);
+        }
+      }
+      
+      // Listen for backend status updates
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message.action === 'backendStatusUpdate') {
+          if (message.available) {
+            backendStatus.textContent = 'Connected to backend server';
+            backendStatus.className = 'status connected';
+            voiceBtn.disabled = false;
+            testBtn.disabled = false;
+            clearFeedback();
+          } else {
+            backendStatus.textContent = 'Error connecting to backend server';
+            backendStatus.className = 'status disconnected';
+            voiceBtn.disabled = true;
+            testBtn.disabled = true;
+            showFeedback('Backend server not available. Make sure it is running at http://localhost:3000');
+          }
+        }
+      });
+      
+      // Initial status check
+      await checkStatus();
+    });
+  </script>
+</body>
+</html> 

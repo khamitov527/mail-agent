@@ -84,6 +84,22 @@ export default function Home() {
       <div className="z-10 max-w-5xl w-full">
         <h1 className="text-4xl font-bold mb-8 text-center">Voice Processing API Tester</h1>
         
+        <div className="mb-8 flex justify-center space-x-4">
+          <a 
+            href="/extension" 
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Extension Integration
+          </a>
+          <a 
+            href="/api/test" 
+            target="_blank" 
+            className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+          >
+            View Test Examples
+          </a>
+        </div>
+
         <div className="mb-8">
           <label className="block text-lg mb-2">
             Enter Voice Transcript:

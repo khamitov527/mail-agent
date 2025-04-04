@@ -1,12 +1,13 @@
 # Voice Processing Backend Service
 
-This Next.js backend service handles voice transcript processing, providing grammar correction and command detection for voice interactions.
+This Next.js backend service handles voice transcript processing, providing grammar correction and command detection for voice interactions, with a focus on email operations.
 
 ## Features
 
 - **Grammar Correction**: Converts raw voice transcripts into grammatically correct sentences
-- **Command Detection**: Identifies actionable commands in the corrected text and extracts structured data
+- **Email Command Detection**: Identifies email-related commands in the corrected text and extracts structured data
 - **Multiple Command Support**: Processes multiple commands from a single voice prompt
+- **Extension Integration**: Ready-to-use utilities for browser extension integration
 - **Built with TypeScript**: Type-safe code for better reliability
 
 ## Getting Started
@@ -65,7 +66,7 @@ Process a voice transcript for grammar correction and command detection.
 
 ```json
 {
-  "rawTranscript": "send email john tomorrow meeting"
+  "rawTranscript": "compose an email to john with subject meeting notes"
 }
 ```
 
@@ -73,25 +74,78 @@ Process a voice transcript for grammar correction and command detection.
 
 ```json
 {
-  "original": "send email john tomorrow meeting",
-  "corrected": "Send an email to John about tomorrow's meeting.",
+  "original": "compose an email to john with subject meeting notes",
+  "corrected": "Compose an email to John with the subject 'Meeting Notes'.",
   "commands": [
     {
-      "command": "draft_email",
-      "recipient": "john",
-      "content": "about tomorrow's meeting"
+      "command": "compose_email"
+    },
+    {
+      "command": "add_recipient",
+      "recipient": "John"
+    },
+    {
+      "command": "add_subject",
+      "subject": "Meeting Notes"
     }
   ]
 }
 ```
 
-## Supported Command Types
+## Supported Email Command Types
 
-The service can detect various command types, including:
+The service can detect various email command types:
 
-- **Email Commands**: Draft emails to recipients
-- **Calendar Events**: Create calendar appointments
-- **Reminders**: Set reminders for tasks
+- **compose_email**: Opens an email composer
+- **add_recipient**: Fills in recipient information
+- **add_subject**: Fills in email subject
+- **add_message**: Fills in email message content
+- **delete_draft**: Deletes the current draft
+- **save_and_close**: Saves the draft and closes the composer
+
+## Browser Extension Integration
+
+This backend is designed to be easily integrated with browser extensions for voice command processing.
+
+### Integration Options
+
+1. **Client-side Script**: Include `extension-client.js` in your extension
+2. **Extension Helper**: Use the utility functions from `src/utils/extension-helper.ts`
+
+### Integration Steps
+
+1. Start the backend server with `npm run dev`
+2. Visit http://localhost:3000/extension for extension integration details
+3. Choose one of the integration options:
+   - Copy the JavaScript code snippet provided
+   - Or include the client script directly: `<script src="http://localhost:3000/extension-client.js"></script>`
+4. Implement the command handlers in your extension to interact with email interfaces
+
+### Example Extension Code
+
+```javascript
+// Initialize the voice client
+const voiceClient = new VoiceProcessingClient('http://localhost:3000');
+
+// Register handlers for email commands
+voiceClient.registerHandler('compose_email', () => {
+  // Implementation to open email composer
+})
+.registerHandler('add_recipient', (cmd) => {
+  // Implementation to add recipient
+  document.querySelector('#recipient-field').value = cmd.recipient;
+})
+.registerHandler('add_subject', (cmd) => {
+  // Implementation to add subject
+  document.querySelector('#subject-field').value = cmd.subject;
+});
+
+// Process voice input from your extension
+async function onSpeechRecognized(transcript) {
+  await voiceClient.processVoice(transcript);
+  // Commands are automatically executed by registered handlers
+}
+```
 
 ## Development
 
@@ -104,13 +158,21 @@ backend/
 │   │   ├── api/
 │   │   │   ├── voice-processing/
 │   │   │   │   └── route.ts    # Main API endpoint for voice processing
-│   │   │   └── test/
-│   │   │       └── route.ts    # Test endpoint with examples
-│   │   ├── page.tsx            # Next.js default page
-│   │   ├── layout.tsx          # Next.js layout
-│   │   └── globals.css         # Global styles
+│   │   │   ├── test/
+│   │   │   │   └── route.ts    # Test endpoint with examples
+│   │   │   └── extension-demo/
+│   │   │       └── route.ts    # Demo API for extension integration
+│   │   ├── extension/
+│   │   │   └── page.tsx        # Extension integration page
+│   │   ├── page.tsx            # Main UI for testing
+│   │   └── ...
+│   ├── utils/
+│   │   ├── ai-processing.ts    # AI processing utilities
+│   │   └── extension-helper.ts # Extension integration helpers
 │   └── types/
 │       └── voice-processing.ts # Type definitions
+├── public/
+│   └── extension-client.js     # Client-side script for extensions
 ├── .env.local.example          # Example environment variables
 └── README.md                   # This file
 ```
@@ -120,6 +182,7 @@ backend/
 - Next.js 14+
 - TypeScript
 - OpenAI API
+- Tailwind CSS
 
 ## Learn More
 
