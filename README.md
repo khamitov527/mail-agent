@@ -1,115 +1,66 @@
-# Mail Agent - Voice-Controlled Gmail Extension
+# Voice Command Chrome Extension
 
-A Chrome extension that allows you to compose and send emails in Gmail using voice commands.
+A general-purpose Chrome extension that uses voice commands to control any website by analyzing the page DOM and using OpenAI to interpret user intent.
 
 ## Features
 
-- **Voice-activated email composition**: Speak commands to create and send emails without typing
-- **Simple command recognition**: Uses keyword matching to understand your intent
-- **Gmail integration**: Works directly with Gmail's interface
-- **Visual feedback**: Microphone visualization and status indicators
-- **Smart context awareness**: Opens compose window automatically when needed
-- **Customizable settings**: Change language, configure notifications, and save contacts
+- **Voice Recognition**: Capture voice commands from the user
+- **DOM Parsing**: Dynamically identify interactive elements on any webpage
+- **OpenAI Integration**: Send voice command and page elements to OpenAI to determine the user's intent
+- **Action Execution**: Perform actions on the page based on OpenAI's interpretation
+- **Fallback Mechanism**: Falls back to original Gmail-specific commands if OpenAI processing fails
 
-## Installation
+## How It Works
 
-### Development Mode
+1. The extension listens for voice commands using Chrome's SpeechRecognition API
+2. When a command is received, it parses the DOM to find all interactive elements (buttons, links, inputs, etc.)
+3. The voice command and interactive elements are sent to OpenAI
+4. OpenAI interprets the command and determines which element to interact with and how
+5. The extension executes the action on the selected element
 
-1. Clone this repository or download it as a ZIP file
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" by toggling the switch in the top-right corner
-4. Click "Load unpacked" and select the directory containing the extension files
-5. The Mail Agent extension should now appear in your extensions list
+## Setup
 
-## Voice Commands
-
-The extension recognizes the following voice commands:
-
-### Compose Actions
-- "Compose email to [name/email]"
-- "New email to [name/email]"
-- "Send email to [name/email]"
-- "Write message to [name/email]"
-- "Compose to [name/email]"
-- "Email to [name/email]"
-- "Write to [name/email]"
-
-### Subject Line
-- "Subject: [your subject line]"
-- "Subject is [your subject line]"
-- "Add subject: [your subject line]"
-- "Set subject: [your subject line]"
-- "Set subject to [your subject line]"
-
-### Email Body
-- "Say: [your message content]"
-- "Message body: [your message content]"
-- "Body says: [your message content]"
-- "Add message: [your message content]"
-- "Type: [your message content]"
-- "Write: [your message content]"
-
-### Send Command
-- "Send"
-- "Send the email"
-- "Send it"
-- "Send now"
-- "Send this"
-- "Send message"
-- "Okay, send it"
-- "Go ahead and send"
-
-### Cancel Command
-- "Cancel"
-- "Nevermind"
-- "Discard email"
-- "Discard"
-- "Close email"
-- "Delete draft"
-
-### Clear/Edit Commands
-- "Clear subject"
-- "Clear body"
-- "Clear message"
-- "Clear recipient"
-- "Delete subject"
-- "Delete body"
-- "Remove recipient"
+1. Clone this repository
+2. Copy `.env-example` to `.env` and add your OpenAI API key
+3. Open Chrome and navigate to `chrome://extensions/`
+4. Enable "Developer mode" in the top-right corner
+5. Click "Load unpacked" and select the repository folder
+6. Click on the extension icon in your toolbar to open the popup
 
 ## Usage
 
-1. Navigate to Gmail in Chrome
-2. Click the Mail Agent extension icon in your toolbar
-3. Click "Start Listening" to begin voice recognition
-4. Speak your commands clearly (the transcript will show what was recognized)
-5. Click "Stop Listening" when you're done
+1. Navigate to any website
+2. Click the extension icon to activate the voice assistant
+3. When the listening indicator appears, speak your command
+4. The extension will process your command and perform the appropriate action on the page
 
-## Smart Features
+## Example Commands
 
-- **Contact management**: Add contacts in settings to use their names instead of typing email addresses
-- **Context awareness**: Commands for subject and body will automatically open a compose window if needed
-- **Audio visualization**: Visual feedback shows when your microphone is detecting sound
-- **Multiple command variations**: Recognize different ways of expressing the same intent
+- "Click the login button"
+- "Fill email field with john@example.com"
+- "Scroll down"
+- "Submit the form"
+- "Open the first search result"
 
-## Customization
+## Technical Details
 
-Access the settings page to:
-- Change speech recognition language
-- Enable/disable automatic listening on startup
-- Configure notification settings
-- Add frequently used contacts
+The extension consists of several key components:
 
-## Limitations
-
-- Works only on Gmail in Chrome
-- Requires microphone access
-- Simple keyword matching (not natural language processing)
-- May require adjustments as Gmail's interface changes
+- **DOM Parser**: Identifies interactive elements and creates selectors to access them
+- **OpenAI Service**: Communicates with OpenAI to interpret commands
+- **Action Executor**: Executes the actions returned by OpenAI
+- **UI Components**: Popup and in-page modal for interaction
 
 ## Privacy
 
-Mail Agent processes all voice recognition locally in your browser using Chrome's built-in speech recognition. No voice data is sent to any server except through Chrome's speech recognition service.
+- Your voice data is processed locally for speech-to-text conversion
+- Text commands and page structure are sent to OpenAI for processing
+- Your OpenAI API key is stored in a local `.env` file that is excluded from version control
 
 ## License
 
-MIT 
+MIT License
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. 

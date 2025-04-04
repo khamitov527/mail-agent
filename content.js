@@ -19,6 +19,29 @@ class GmailCommandHandler {
     this.recognitionTimeout = null;
     this.modal = null;
     this.modalTranscript = null;
+    
+    // Initialize the action executor for DOM parsing and OpenAI integration
+    this.actionExecutor = null;
+    this.initActionExecutor();
+  }
+  
+  // Initialize the action executor with API key from environment
+  async initActionExecutor() {
+    try {
+      // Wait for the environment loader to load the API key
+      await window.envLoader.load();
+      const apiKey = window.envLoader.get('OPENAI_API_KEY');
+      
+      if (!apiKey) {
+        console.error('No API key found in .env file');
+        return;
+      }
+      
+      this.actionExecutor = new window.ActionExecutor(apiKey);
+      console.log('Action executor initialized with API key from environment');
+    } catch (error) {
+      console.error('Failed to initialize action executor:', error);
+    }
   }
 
   setupMessageListeners() {
@@ -30,7 +53,23 @@ class GmailCommandHandler {
           this.settings = message.settings;
         }
         
-        this.processCommand(message.command);
+        // Use the new action executor if available, otherwise fall back to old method
+        if (this.actionExecutor) {
+          this.actionExecutor.processVoiceCommand(message.command)
+            .then(result => {
+              if (result.success) {
+                this.showNotification(`Processed: ${message.command}`, 'success');
+              } else {
+                this.showNotification(`Error: ${result.error}`, 'error');
+                // Fall back to original processing if OpenAI fails
+                this.processCommand(message.command);
+              }
+            });
+        } else {
+          // Fall back to original processing if executor not initialized
+          this.processCommand(message.command);
+        }
+        
         // Log the command to background script
         chrome.runtime.sendMessage({
           action: 'logCommand',
@@ -64,6 +103,17 @@ class GmailCommandHandler {
       if (message.action === 'getRecognitionStatus') {
         sendResponse({
           isListening: this.currentState.isListening
+        });
+        return true;
+      }
+      
+      // Add API key update message handler
+      if (message.action === 'updateApiKey') {
+        // Reload API key from environment
+        this.initActionExecutor().then(() => {
+          sendResponse({status: 'updated'});
+        }).catch(error => {
+          sendResponse({status: 'error', message: error.message});
         });
         return true;
       }
@@ -459,7 +509,52 @@ class GmailCommandHandler {
       if (event.results[i].isFinal) {
         finalTranscript += transcript;
         console.log('Final transcript:', transcript.trim());
-        this.processCommand(transcript.trim());
+        
+        // Process the command with our new action executor if available
+        if (this.actionExecutor) {
+          // Add a system message to show processing status
+          if (this.modalTranscript) {
+            this.addToModalTranscript(`Processing: "${transcript.trim()}"`, false, true);
+          }
+          
+          // Process command through the action executor which uses DOM parsing and OpenAI
+          console.log(`Sending voice command to ActionExecutor: "${transcript.trim()}"`);
+          this.actionExecutor.processVoiceCommand(transcript.trim())
+            .then(result => {
+              console.log(`ActionExecutor result:`, JSON.stringify(result, null, 2));
+              
+              if (result.success) {
+                // Check if we got a "No action" response
+                if (result.message && result.message.includes('No action') || 
+                    (typeof result.action === 'object' && result.action.action === 'No action')) {
+                  console.log('No specific action found for command, falling back to default handler');
+                  this.processCommand(transcript.trim());
+                } else {
+                  console.log('Command processed successfully by ActionExecutor');
+                  this.showNotification(`Command processed: ${transcript.trim()}`, 'success');
+                  // Add system message about successful processing
+                  if (this.modalTranscript) {
+                    this.addToModalTranscript('✓ Command processed successfully', false, true);
+                  }
+                }
+              } else {
+                // If OpenAI processing failed, fall back to original method
+                console.warn('OpenAI processing failed, falling back to default handler');
+                console.warn('Error details:', result.error);
+                this.showNotification(`Action processing failed: ${result.error || 'Unknown error'}`, 'warning');
+                this.processCommand(transcript.trim());
+              }
+            })
+            .catch(error => {
+              console.error('Error processing with ActionExecutor:', error);
+              console.error('Stack trace:', error.stack);
+              // Fall back to original processing on error
+              this.processCommand(transcript.trim());
+            });
+        } else {
+          // Fall back to original processing if no action executor
+          this.processCommand(transcript.trim());
+        }
         
         // Send transcript to the popup
         chrome.runtime.sendMessage({

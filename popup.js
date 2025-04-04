@@ -3,36 +3,31 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Simple event listener for the launch button
   launchButton.addEventListener('click', function() {
-    launchVesper();
+    launchVoiceAssistant();
   });
   
-  function launchVesper() {
-    // Get the active tab (which should be Gmail)
+  function launchVoiceAssistant() {
+    // Get the active tab
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       if (tabs.length === 0) {
         console.error('No active tab found');
-        alert('Make sure you are on Gmail to use Vesper');
+        alert('No active tab found. Please try again.');
         return;
       }
       
-      // Make sure we're on Gmail
-      if (!tabs[0].url.includes('mail.google.com')) {
-        alert('Vesper only works on Gmail. Please navigate to Gmail first.');
-        return;
-      }
-      
-      // Execute script directly in the page context to start recognition
+      // Check if we need to inject the script or just send a message
       chrome.scripting.executeScript({
         target: {tabId: tabs[0].id},
         function: function() {
           // This code runs in the context of the page
+          // First check if our handler is already initialized
           if (window.mailAgentHandler) {
-            console.log('Starting Vesper voice assistant');
+            console.log('Starting voice assistant');
             
             // Update agent name and styling
             window.mailAgentHandler.settings = {
               ...window.mailAgentHandler.settings,
-              agentName: 'Vesper',
+              agentName: 'Voice Assistant',
               mainColor: '#4169E1' // Royal Blue
             };
             
@@ -40,19 +35,19 @@ document.addEventListener('DOMContentLoaded', function() {
             window.mailAgentHandler.startSpeechRecognition();
             
             // Create the modal UI if it doesn't exist
-            if (!document.querySelector('.mail-agent-modal')) {
+            if (!document.querySelector('.vesper-modal')) {
               window.mailAgentHandler.createModal();
             }
             return {status: 'started'};
           } else {
-            console.error('Vesper handler not found in page');
-            return {status: 'error', message: 'Vesper not initialized in Gmail'};
+            console.error('Voice assistant handler not found in page');
+            return {status: 'error', message: 'Voice assistant not initialized on page'};
           }
         }
       }, function(results) {
         if (chrome.runtime.lastError) {
           console.error('Error executing script:', chrome.runtime.lastError);
-          alert('Could not communicate with Gmail. Try refreshing the page.');
+          alert('Could not start voice assistant. Try refreshing the page.');
           return;
         }
         

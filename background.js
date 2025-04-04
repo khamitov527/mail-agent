@@ -1,7 +1,44 @@
 // Listen for installation
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Mail Agent extension installed');
+  console.log('Voice Command Assistant extension installed');
+  
+  // Initialize environment variables
+  initializeEnvironment();
 });
+
+/**
+ * Initialize environment variables from .env file
+ */
+async function initializeEnvironment() {
+  try {
+    // Use the fetch API to load the .env file
+    const response = await fetch(chrome.runtime.getURL('.env'));
+    const text = await response.text();
+    
+    // Parse the .env file content
+    const env = {};
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      const [key, ...valueParts] = trimmed.split('=');
+      if (key && valueParts.length) {
+        const value = valueParts.join('='); // Rejoin in case value had = symbols
+        env[key.trim()] = value.trim();
+      }
+    }
+    
+    // Store the API key in memory for this session
+    if (env.OPENAI_API_KEY) {
+      console.log('API key loaded from .env file');
+    } else {
+      console.warn('No API key found in .env file');
+    }
+  } catch (error) {
+    console.error('Failed to load environment variables:', error);
+  }
+}
 
 // Add a context menu item for direct access
 chrome.runtime.onInstalled.addListener(() => {
@@ -9,7 +46,7 @@ chrome.runtime.onInstalled.addListener(() => {
     id: 'startVoiceRecognition',
     title: 'Start voice recognition',
     contexts: ['page'],
-    documentUrlPatterns: ['*://mail.google.com/*']
+    documentUrlPatterns: ['<all_urls>']
   });
 });
 
@@ -36,7 +73,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       type: 'basic',
       iconUrl: 'icon.png',
       title: 'Microphone Access Required',
-      message: 'Mail Agent needs microphone access to work. Please check your Chrome settings.',
+      message: 'Voice Command Assistant needs microphone access to work. Please check your Chrome settings.',
       buttons: [
         { title: 'Open Settings' }
       ],

@@ -7,19 +7,24 @@ This guide will help you install and use the Mail Agent Chrome extension for voi
 1. **Download the Extension**
    - Download this entire folder/repository to your computer
 
-2. **Open Chrome Extensions Page**
+2. **Set Up Your API Key**
+   - Copy the `.env-example` file to a new file named `.env`
+   - Open the `.env` file in any text editor
+   - Replace the example API key with your actual OpenAI API key
+
+3. **Open Chrome Extensions Page**
    - Open Chrome and navigate to `chrome://extensions/`
    - Or click the three-dot menu → More Tools → Extensions
 
-3. **Enable Developer Mode**
+4. **Enable Developer Mode**
    - Toggle on "Developer mode" in the top-right corner of the Extensions page
 
-4. **Load the Extension**
+5. **Load the Extension**
    - Click "Load unpacked"
    - Select the folder containing the Mail Agent extension files
    - You should see "Mail Agent" appear in your extensions list
 
-5. **Pin the Extension (Optional)**
+6. **Pin the Extension (Optional)**
    - Click the puzzle piece icon in Chrome toolbar
    - Find Mail Agent and click the pin icon to keep it visible
 
@@ -62,8 +67,9 @@ This guide will help you install and use the Mail Agent Chrome extension for voi
 - **Extension Not Working?**
   - Make sure you're on Gmail and signed in
   - Try refreshing the Gmail page
+  - Verify your API key is correctly set in the `.env` file
   - Reinstall the extension if necessary
 
 ## Privacy Note
 
-Mail Agent processes all voice recognition locally in your browser using Chrome's built-in speech recognition. No voice data is stored or sent to external servers beyond what Chrome's speech API requires. 
+Mail Agent processes all voice recognition locally in your browser using Chrome's built-in speech recognition. Your voice data and page structure are sent to OpenAI for command interpretation using the API key you provided in the `.env` file. The API key is stored locally and never shared. 
