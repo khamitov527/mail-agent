@@ -57,9 +57,13 @@ class ActionExecutor {
       // 5. Start executing the action queue if not already executing
       if (!this.isExecuting && this.actionQueue.length > 0) {
         console.log('Starting execution of action queue...');
-        await this.executeActionQueue();
-        console.log('Action queue execution completed');
-        return { success: true, message: 'Voice command processed successfully' };
+        const executionResult = await this.executeActionQueue();
+        console.log('Action queue execution completed:', JSON.stringify(executionResult, null, 2));
+        
+        // Include original action plan in the result
+        executionResult.originalAction = actionPlan;
+        
+        return executionResult;
       } else if (this.actionQueue.length === 0) {
         console.log('No actions were added to the queue');
         return { 
@@ -112,7 +116,8 @@ class ActionExecutor {
     }
 
     this.isExecuting = true;
-
+    const results = [];
+    
     try {
       while (this.actionQueue.length > 0) {
         const action = this.actionQueue.shift();
@@ -123,10 +128,36 @@ class ActionExecutor {
         }
         
         // Execute the current action
-        await this.executeSingleAction(action);
+        const actionResult = await this.executeSingleAction(action);
+        results.push(actionResult);
+        
+        // If we have a warning about no visible changes, add it to the overall results
+        if (actionResult.warning) {
+          console.warn(`Action executed but might not have worked as expected: ${actionResult.warning}`);
+        }
       }
+      
+      // Compile overall execution results
+      const anyWarnings = results.some(r => r.warning);
+      const allSucceeded = results.every(r => r.success);
+      
+      return {
+        success: allSucceeded,
+        message: allSucceeded 
+          ? (anyWarnings 
+              ? 'Actions executed but some might not have worked as expected'
+              : 'Voice command processed successfully')
+          : 'Some actions failed to execute',
+        results: results,
+        warning: anyWarnings ? 'Some actions might not have worked as expected' : null
+      };
     } catch (error) {
       console.error('Error executing action queue:', error);
+      return {
+        success: false,
+        error: error.message,
+        results: results
+      };
     } finally {
       this.isExecuting = false;
     }
@@ -142,7 +173,7 @@ class ActionExecutor {
       console.log('Executing action:', JSON.stringify(action, null, 2));
       
       // Handle different action formats
-      let selector, type, value;
+      let selector, type, value, index;
       
       if (typeof action === 'string') {
         // Simple string action (unlikely but handled for completeness)
@@ -154,33 +185,62 @@ class ActionExecutor {
         selector = action.action.selector;
         type = action.action.type;
         value = action.action.value;
+        index = action.action.index;
       } else if (action.action && typeof action.action === 'string') {
         // Format: { action: 'click', selector: '#some-button', value: null }
         console.log('Processing object with action string');
         selector = action.selector;
         type = action.action;
         value = action.value;
+        index = action.index;
       } else {
         // Standard format: { type: 'click', selector: '#some-button', value: null }
         console.log('Processing standard action object');
         selector = action.selector;
         type = action.type;
         value = action.value;
+        index = action.index;
       }
       
-      console.log(`Action details - Type: ${type}, Selector: ${selector}, Value: ${value}`);
+      console.log(`Action details - Type: ${type}, Selector: ${selector}, Value: ${value}${index !== undefined ? `, Index: ${index}` : ''}`);
       
       if (!selector || !type) {
         throw new Error('Invalid action: missing selector or type');
       }
       
       // Execute the action on the DOM element
-      console.log(`Attempting to execute "${type}" on selector "${selector}"`);
-      const result = this.domParser.executeAction(selector, type, value);
+      console.log(`Attempting to execute "${type}" on selector "${selector}"${index !== undefined ? ` at index ${index}` : ''}`);
+      const result = await this.domParser.executeAction(selector, type, value, index);
       
-      console.log(`Executed action: ${type} on ${selector}`, result ? 'Success' : 'Failed');
-      
-      return result;
+      if (result.success) {
+        console.log(`Executed action: ${type} on ${selector} - Success`, result);
+        
+        // Check for warning about no visible changes
+        if (result.warning) {
+          console.warn(result.warning);
+          console.warn('Possible reasons:', result.possibleReasons);
+          
+          // Return a more detailed result with the warning
+          return {
+            success: true,
+            action: type,
+            selector: selector,
+            warning: result.warning,
+            possibleReasons: result.possibleReasons,
+            elementInfo: result.elementInfo
+          };
+        }
+        
+        return {
+          success: true,
+          action: type,
+          selector: selector,
+          visibleChange: result.visibleChange
+        };
+      } else {
+        console.error(`Failed to execute action: ${type} on ${selector}`, result.error);
+        throw new Error(result.error || 'Unknown error executing action');
+      }
     } catch (error) {
       console.error('Error executing action:', error);
       throw error;

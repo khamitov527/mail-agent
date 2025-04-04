@@ -529,6 +529,23 @@ class GmailCommandHandler {
                     (typeof result.action === 'object' && result.action.action === 'No action')) {
                   console.log('No specific action found for command, falling back to default handler');
                   this.processCommand(transcript.trim());
+                } else if (result.warning || (result.action && result.action.warning)) {
+                  // Handle warning cases (action executed but no visible change)
+                  const warning = result.warning || (result.action && result.action.warning);
+                  const reasons = result.possibleReasons || (result.action && result.action.possibleReasons) || [];
+                  
+                  console.warn('Command processed but with warnings:', warning);
+                  
+                  // Show more detailed notification
+                  this.showNotification(`Action might not have worked as expected. ${reasons[0] || ''}`, 'warning');
+                  
+                  // Add system message about the warning
+                  if (this.modalTranscript) {
+                    this.addToModalTranscript(`⚠️ ${warning}`, false, true);
+                    if (reasons.length > 0) {
+                      this.addToModalTranscript(`Possible reason: ${reasons[0]}`, false, true);
+                    }
+                  }
                 } else {
                   console.log('Command processed successfully by ActionExecutor');
                   this.showNotification(`Command processed: ${transcript.trim()}`, 'success');
@@ -788,10 +805,33 @@ class GmailCommandHandler {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `vesper-notification vesper-notification-${type}`;
+    
+    // Set the color based on notification type
+    let notificationColor = mainColor;
+    let iconHtml = '';
+    
+    switch(type) {
+      case 'error':
+        notificationColor = '#d32f2f';
+        iconHtml = '<span style="margin-right:8px;">❌</span>';
+        break;
+      case 'warning':
+        notificationColor = '#f57c00';
+        iconHtml = '<span style="margin-right:8px;">⚠️</span>';
+        break;
+      case 'success':
+        notificationColor = '#43a047';
+        iconHtml = '<span style="margin-right:8px;">✅</span>';
+        break;
+      default: // info
+        notificationColor = mainColor;
+        iconHtml = '<span style="margin-right:8px;">ℹ️</span>';
+    }
+    
     notification.style.cssText = `
-      background-color: ${type === 'error' ? '#ffebee' : 'white'};
-      color: ${type === 'error' ? '#d32f2f' : '#333'};
-      border-left: 3px solid ${type === 'error' ? '#d32f2f' : mainColor};
+      background-color: ${type === 'error' ? '#ffebee' : type === 'warning' ? '#fff8e1' : 'white'};
+      color: #333;
+      border-left: 3px solid ${notificationColor};
       padding: 12px 16px;
       margin-bottom: 10px;
       border-radius: 4px;
@@ -801,11 +841,15 @@ class GmailCommandHandler {
       font-weight: 400;
       opacity: 0;
       transition: opacity 0.3s;
+      display: flex;
+      align-items: center;
     `;
     
     // Add icon and message
     notification.innerHTML = `
-      <strong style="color:${type === 'error' ? '#d32f2f' : mainColor};">Vesper:</strong> ${message}
+      ${iconHtml}<div>
+        <strong style="color:${notificationColor};">Vesper:</strong> ${message}
+      </div>
     `;
     
     // Add to container
@@ -818,6 +862,8 @@ class GmailCommandHandler {
     
     // Remove after notification duration (from settings)
     const duration = (this.settings.notificationDuration || 3) * 1000;
+    // Longer duration for warnings and errors
+    const adjustedDuration = type === 'warning' || type === 'error' ? duration * 1.5 : duration;
     
     setTimeout(() => {
       notification.style.opacity = '0';
@@ -826,7 +872,7 @@ class GmailCommandHandler {
           this.notificationContainer.removeChild(notification);
         }
       }, 300);
-    }, duration);
+    }, adjustedDuration);
   }
 
   // Track email compose state
