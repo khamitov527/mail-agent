@@ -1,66 +1,178 @@
-# Voice Command Chrome Extension
+# State Machine for Voice Command Processing
 
-A general-purpose Chrome extension that uses voice commands to control any website by analyzing the page DOM and using OpenAI to interpret user intent.
+A generic, reusable state machine with an action queue designed for Chrome extensions to handle multi-step voice commands while preserving context across sequential OpenAI API calls.
 
-## Features
+## Overview
 
-- **Voice Recognition**: Capture voice commands from the user
-- **DOM Parsing**: Dynamically identify interactive elements on any webpage
-- **OpenAI Integration**: Send voice command and page elements to OpenAI to determine the user's intent
-- **Action Execution**: Perform actions on the page based on OpenAI's interpretation
-- **Fallback Mechanism**: Falls back to original Gmail-specific commands if OpenAI processing fails
+This system implements a flexible state machine framework that enables complex multi-step interactions with web pages via voice commands. The state machine:
 
-## How It Works
+1. Manages state transitions through predefined workflows
+2. Preserves context between states
+3. Integrates with OpenAI to determine appropriate actions for each state
+4. Handles DOM interaction in a website-agnostic way
+5. Provides a retry mechanism for failed actions
 
-1. The extension listens for voice commands using Chrome's SpeechRecognition API
-2. When a command is received, it parses the DOM to find all interactive elements (buttons, links, inputs, etc.)
-3. The voice command and interactive elements are sent to OpenAI
-4. OpenAI interprets the command and determines which element to interact with and how
-5. The extension executes the action on the selected element
+## Components
 
-## Setup
+### StateMachine
 
-1. Clone this repository
-2. Copy `.env-example` to `.env` and add your OpenAI API key
-3. Open Chrome and navigate to `chrome://extensions/`
-4. Enable "Developer mode" in the top-right corner
-5. Click "Load unpacked" and select the repository folder
-6. Click on the extension icon in your toolbar to open the popup
+The core component that manages states, transitions, and action execution:
 
-## Usage
+- Customizable states and transitions
+- Context persistence across states
+- Action queuing and sequential execution
+- Retry mechanism for failed actions
+- Hooks for state changes and completion
 
-1. Navigate to any website
-2. Click the extension icon to activate the voice assistant
-3. When the listening indicator appears, speak your command
-4. The extension will process your command and perform the appropriate action on the page
+### DOMParser
 
-## Example Commands
+Handles website DOM interaction:
 
-- "Click the login button"
-- "Fill email field with john@example.com"
-- "Scroll down"
-- "Submit the form"
-- "Open the first search result"
+- Extracts actionable elements from any website
+- Finds elements across shadow DOM boundaries
+- Executes actions like clicking, typing, and selecting
+- Implements different strategies for finding elements (by ID, text, ARIA attributes, etc.)
 
-## Technical Details
+### OpenAIService
 
-The extension consists of several key components:
+Manages communication with the OpenAI API:
 
-- **DOM Parser**: Identifies interactive elements and creates selectors to access them
-- **OpenAI Service**: Communicates with OpenAI to interpret commands
-- **Action Executor**: Executes the actions returned by OpenAI
-- **UI Components**: Popup and in-page modal for interaction
+- Formats payloads with current state, context, and DOM snapshot
+- Maintains conversation history for better context
+- Processes responses into actionable instructions
+- Handles error conditions gracefully
 
-## Privacy
+## Usage Example
 
-- Your voice data is processed locally for speech-to-text conversion
-- Text commands and page structure are sent to OpenAI for processing
-- Your OpenAI API key is stored in a local `.env` file that is excluded from version control
+```javascript
+import StateMachine from './state-machine.js';
+import DOMParser from './dom-parser.js';
+import OpenAIService from './openai-service.js';
+
+// Initialize dependencies
+const domParser = new DOMParser();
+const openaiService = new OpenAIService({
+  apiKey: 'YOUR_API_KEY',
+  model: 'gpt-4-1106-preview'
+});
+
+// Define a workflow (e.g., sending an email)
+const emailWorkflow = {
+  states: ['INIT', 'OPEN_COMPOSER', 'FILL_RECIPIENT', 'FILL_BODY', 'SEND_EMAIL', 'DONE', 'ERROR'],
+  transitions: {
+    INIT: 'OPEN_COMPOSER',
+    OPEN_COMPOSER: 'FILL_RECIPIENT',
+    FILL_RECIPIENT: 'FILL_BODY',
+    FILL_BODY: 'SEND_EMAIL',
+    SEND_EMAIL: 'DONE'
+  },
+  initialState: 'INIT',
+  context: {
+    recipient: 'tony',
+    message: 'hey, what\'s up with the dinner?'
+  },
+  dependencies: {
+    domParser,
+    openaiService
+  },
+  onStateChange: (state) => {
+    console.log(`State changed to: ${state}`);
+  },
+  onComplete: (context) => {
+    console.log('Workflow completed successfully!', context);
+  }
+};
+
+// Create and start the state machine
+const machine = new StateMachine(emailWorkflow);
+machine.start();
+```
+
+See `example-usage.js` for more detailed examples including different workflow types.
+
+## State Machine Payload Example
+
+For each state, the state machine sends a payload to OpenAI that looks like:
+
+```json
+{
+  "state": "FILL_RECIPIENT",
+  "context": {
+    "recipient": "tony",
+    "message": "hey what's up with the dinner?"
+  },
+  "domElements": [
+    {
+      "uniqueId": "element_1",
+      "type": "input",
+      "inputType": "text",
+      "placeholder": "To",
+      "value": "",
+      "name": "to",
+      "id": "recipient-field",
+      "classes": "input-field recipient",
+      "isVisible": true,
+      "label": "Recipient",
+      "ariaLabel": "Email recipient"
+    },
+    // ...other elements
+  ]
+}
+```
+
+## OpenAI Response Format
+
+OpenAI should respond with an action or array of actions:
+
+```json
+{
+  "action": {
+    "type": "type",
+    "elementId": "element_1",
+    "value": "tony@example.com"
+  },
+  "context": {
+    "recipientResolved": true
+  }
+}
+```
+
+Or multiple actions:
+
+```json
+{
+  "actions": [
+    {
+      "type": "click",
+      "elementId": "element_5"
+    },
+    {
+      "type": "type",
+      "elementId": "element_8",
+      "value": "Subject line"
+    }
+  ]
+}
+```
+
+## Integration in Chrome Extension
+
+To use this framework in a Chrome extension:
+
+1. Include these files in your extension's content scripts
+2. Set up appropriate permissions in your manifest.json
+3. Initialize the components on page load or when activating voice commands
+4. Configure your workflows based on common user tasks
+
+## Extending
+
+You can extend this framework by:
+
+1. Adding new action types to DOMParser
+2. Creating custom workflows for different voice commands
+3. Enhancing the intent parsing system
+4. Adding specialized state handling for specific websites
 
 ## License
 
-MIT License
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. 
+MIT 

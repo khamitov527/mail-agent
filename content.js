@@ -39,6 +39,9 @@ class GmailCommandHandler {
         return;
       }
       
+      // Log the first few characters of the API key for debugging
+      console.log(`API Key loaded (first 5 chars): ${apiKey.substring(0, 5)}...`);
+      
       this.actionExecutor = new window.ActionExecutor(apiKey);
       console.log('Action executor initialized with API key from environment');
     } catch (error) {

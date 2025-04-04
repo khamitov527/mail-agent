@@ -5,7 +5,7 @@
 
 class ActionExecutor {
   constructor(apiKey) {
-    this.domParser = window.DOMParser;
+    this.domParser = new window.DOMParser();
     this.openAIService = new window.OpenAIService(apiKey);
     this.actionQueue = [];
     this.isExecuting = false;
@@ -263,5 +263,5 @@ class ActionExecutor {
   }
 }
 
-// Export the class for use in other modules
+// Expose ActionExecutor to the window object
 window.ActionExecutor = ActionExecutor; 
