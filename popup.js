@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   function startListening() {
-    // Send message to content script to start recognition
+    // Get the active tab (which should be Gmail)
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       if (tabs.length === 0) {
         console.error('No active tab found');
@@ -73,17 +73,29 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       
-      chrome.tabs.sendMessage(tabs[0].id, {
-        action: 'startRecognition',
-        settings: settings
-      }, function(response) {
+      // Execute script directly in the page context to start recognition
+      // This ensures recognition.start() is called directly from a user gesture handler
+      chrome.scripting.executeScript({
+        target: {tabId: tabs[0].id},
+        function: function() {
+          // This code runs in the context of the page
+          if (window.mailAgentHandler && typeof window.mailAgentHandler.startSpeechRecognition === 'function') {
+            console.log('Starting speech recognition directly from click handler');
+            window.mailAgentHandler.startSpeechRecognition();
+            return {status: 'started'};
+          } else {
+            console.error('Mail Agent handler not found in page');
+            return {status: 'error', message: 'Mail Agent not initialized in Gmail'};
+          }
+        }
+      }, function(results) {
         if (chrome.runtime.lastError) {
-          console.error('Error starting recognition:', chrome.runtime.lastError);
+          console.error('Error executing script:', chrome.runtime.lastError);
           showError('Could not communicate with Gmail. Try refreshing the page.');
           return;
         }
         
-        if (response && response.status === 'started') {
+        if (results && results[0] && results[0].result && results[0].result.status === 'started') {
           updateListeningState(true);
           
           // Clear transcript when starting a new session
@@ -91,6 +103,8 @@ document.addEventListener('DOMContentLoaded', function() {
           
           // Show a helper message
           showHelperMessage();
+        } else if (results && results[0] && results[0].result && results[0].result.status === 'error') {
+          showError(results[0].result.message || 'Error starting recognition');
         }
       });
     });

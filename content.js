@@ -137,6 +137,10 @@ class GmailCommandHandler {
   }
   
   handleRecognitionResult(event) {
+    // Add debug logging to verify this function is firing
+    console.log('handleRecognitionResult fired', event);
+    console.log('Results received:', event.results);
+    
     // Reset the timeout on receiving results
     if (this.recognitionTimeout) {
       clearTimeout(this.recognitionTimeout);
@@ -159,6 +163,7 @@ class GmailCommandHandler {
       const transcript = event.results[i][0].transcript;
       if (event.results[i].isFinal) {
         finalTranscript += transcript;
+        console.log('Final transcript:', transcript.trim());
         this.processCommand(transcript.trim());
         
         // Send transcript to the popup
@@ -169,6 +174,7 @@ class GmailCommandHandler {
         });
       } else {
         interimTranscript += transcript;
+        console.log('Interim transcript:', interimTranscript);
         
         // Send interim transcript to the popup
         chrome.runtime.sendMessage({
@@ -813,7 +819,11 @@ class GmailCommandHandler {
 }
 
 // Initialize the command handler
-const gmailCommandHandler = new GmailCommandHandler();
+const handler = new GmailCommandHandler();
+
+// Expose the handler to the window object so it can be accessed directly
+// This allows recognition.start() to be called directly from a user gesture handler
+window.mailAgentHandler = handler;
 
 // Log that the content script is running
 console.log('Mail Agent content script is running on Gmail'); 
