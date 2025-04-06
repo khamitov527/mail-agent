@@ -1,178 +1,133 @@
-# State Machine for Voice Command Processing
+# Vesper: Voice Command Browser Automation
 
-A generic, reusable state machine with an action queue designed for Chrome extensions to handle multi-step voice commands while preserving context across sequential OpenAI API calls.
+Vesper is a Chrome extension that lets you control your browser using voice commands. Initially built as a mail agent (hence some legacy names), it has pivoted to support general browser automation. The extension leverages voice recognition, DOM parsing, and OpenAI-powered command interpretation to execute actions on any website.
 
-## Overview
+---
 
-This system implements a flexible state machine framework that enables complex multi-step interactions with web pages via voice commands. The state machine:
+## Key Features
 
-1. Manages state transitions through predefined workflows
-2. Preserves context between states
-3. Integrates with OpenAI to determine appropriate actions for each state
-4. Handles DOM interaction in a website-agnostic way
-5. Provides a retry mechanism for failed actions
+- **Voice-Activated Control:** Use voice commands to click, type, select, and clear elements on any webpage.
+- **AI-Powered Command Processing:** Commands are sent to OpenAI to generate an actionable plan based on the current DOM state.
+- **State Machine Workflows:** Supports multi-step tasks (e.g., sending an email, performing searches, navigating) with a robust state machine.
+- **Dynamic DOM Parsing:** Scans the webpage for actionable elements (inputs, buttons, links, etc.) and interacts with them reliably.
+- **Customizable UI:** Includes a draggable modal for visual feedback and notifications.
+- **Contextual Command Handling:** Integrates legacy mail commands while supporting broader browser actions.
 
-## Components
+---
 
-### StateMachine
+## Architecture Overview
 
-The core component that manages states, transitions, and action execution:
+- **Content Scripts:**  
+  - **`action-executor.js`** – Bridges the DOM parser with the OpenAI service, executing actions from voice commands.
+  - **`dom-parser.js`** – Extracts actionable DOM elements and provides methods to execute interactions (click, type, etc.).
+  - **`env-loader.js`** – Loads environment variables (e.g., your OpenAI API key) from a local `.env` file.
+  - **`content.js`** – Sets up the voice command handler (initially for Gmail, now repurposed for broader use).
 
-- Customizable states and transitions
-- Context persistence across states
-- Action queuing and sequential execution
-- Retry mechanism for failed actions
-- Hooks for state changes and completion
+- **Background & Popup:**  
+  - **`background.js`** – Listens for installation and context menu events.
+  - **`popup.html` & `popup.js`** – Provides a simple UI to launch the voice assistant.
+  
+- **State Machine:**  
+  - **`state-machine.js`** – Implements a generic state machine to manage multi-step workflows.
+  - **Workflow Scripts:** Define specific workflows for tasks such as email composition, search, and navigation.
 
-### DOMParser
+- **OpenAI Integration:**  
+  - **`openai-service.js`** – Handles API calls to OpenAI, manages conversation context, and parses responses into actionable JSON.
 
-Handles website DOM interaction:
+---
 
-- Extracts actionable elements from any website
-- Finds elements across shadow DOM boundaries
-- Executes actions like clicking, typing, and selecting
-- Implements different strategies for finding elements (by ID, text, ARIA attributes, etc.)
+## Setup & Installation
 
-### OpenAIService
+1. **Clone or Download the Repository.**
 
-Manages communication with the OpenAI API:
+2. **Create a `.env` File:**  
+   In the extension root, add a `.env` file containing:
+   OPENAI_API_KEY=your_openai_api_key_here
 
-- Formats payloads with current state, context, and DOM snapshot
-- Maintains conversation history for better context
-- Processes responses into actionable instructions
-- Handles error conditions gracefully
+This key is used by the OpenAI service for processing voice commands.
 
-## Usage Example
+3. **Load the Extension in Chrome:**
+- Open `chrome://extensions/` and enable Developer Mode.
+- Click on "Load unpacked" and select the extension’s directory.
 
-```javascript
-import StateMachine from './state-machine.js';
-import DOMParser from './dom-parser.js';
-import OpenAIService from './openai-service.js';
+4. **Permissions:**  
+The manifest declares permissions for `activeTab`, `scripting`, `audioCapture`, `notifications`, `contextMenus`, and `storage`. Ensure these are granted.
 
-// Initialize dependencies
-const domParser = new DOMParser();
-const openaiService = new OpenAIService({
-  apiKey: 'YOUR_API_KEY',
-  model: 'gpt-4-1106-preview'
-});
+---
 
-// Define a workflow (e.g., sending an email)
-const emailWorkflow = {
-  states: ['INIT', 'OPEN_COMPOSER', 'FILL_RECIPIENT', 'FILL_BODY', 'SEND_EMAIL', 'DONE', 'ERROR'],
-  transitions: {
-    INIT: 'OPEN_COMPOSER',
-    OPEN_COMPOSER: 'FILL_RECIPIENT',
-    FILL_RECIPIENT: 'FILL_BODY',
-    FILL_BODY: 'SEND_EMAIL',
-    SEND_EMAIL: 'DONE'
-  },
-  initialState: 'INIT',
-  context: {
-    recipient: 'tony',
-    message: 'hey, what\'s up with the dinner?'
-  },
-  dependencies: {
-    domParser,
-    openaiService
-  },
-  onStateChange: (state) => {
-    console.log(`State changed to: ${state}`);
-  },
-  onComplete: (context) => {
-    console.log('Workflow completed successfully!', context);
-  }
-};
+## Usage
 
-// Create and start the state machine
-const machine = new StateMachine(emailWorkflow);
-machine.start();
-```
+- **Launching Vesper:**  
+Click the extension icon or use the context menu ("Start voice recognition") to activate voice control.
 
-See `example-usage.js` for more detailed examples including different workflow types.
+- **Voice Commands:**  
+Speak commands like:
+- _"Click the login button"_
+- _"Type my password"_
+- _"Select the third option"_
 
-## State Machine Payload Example
+Vesper processes the command, sends it along with the current DOM snapshot to OpenAI, and executes the returned actions.
 
-For each state, the state machine sends a payload to OpenAI that looks like:
+- **Modal Interface:**  
+A draggable modal provides visual feedback, displaying the transcript, notifications, and command responses.
 
-```json
-{
-  "state": "FILL_RECIPIENT",
-  "context": {
-    "recipient": "tony",
-    "message": "hey what's up with the dinner?"
-  },
-  "domElements": [
-    {
-      "uniqueId": "element_1",
-      "type": "input",
-      "inputType": "text",
-      "placeholder": "To",
-      "value": "",
-      "name": "to",
-      "id": "recipient-field",
-      "classes": "input-field recipient",
-      "isVisible": true,
-      "label": "Recipient",
-      "ariaLabel": "Email recipient"
-    },
-    // ...other elements
-  ]
-}
-```
+- **Fallback Handling:**  
+If the AI returns “No action” or the command isn’t recognized, Vesper falls back to legacy command processing.
 
-## OpenAI Response Format
+---
 
-OpenAI should respond with an action or array of actions:
+## Code Structure & Concepts
 
-```json
-{
-  "action": {
-    "type": "type",
-    "elementId": "element_1",
-    "value": "tony@example.com"
-  },
-  "context": {
-    "recipientResolved": true
-  }
-}
-```
+- **ActionExecutor:**  
+Central class that handles:
+- Parsing voice commands.
+- Queuing actions.
+- Executing them sequentially with built-in error handling and DOM update delays.
 
-Or multiple actions:
+- **DOMParser:**  
+Scans the webpage (including shadow DOM) to identify interactive elements. It returns a lightweight snapshot for OpenAI processing and executes actions on the actual DOM.
 
-```json
-{
-  "actions": [
-    {
-      "type": "click",
-      "elementId": "element_5"
-    },
-    {
-      "type": "type",
-      "elementId": "element_8",
-      "value": "Subject line"
-    }
-  ]
-}
-```
+- **State Machine:**  
+Manages complex multi-step workflows by transitioning between states (e.g., INIT → OPEN_COMPOSER → FILL_RECIPIENT) based on OpenAI-generated actions.
 
-## Integration in Chrome Extension
+- **OpenAIService:**  
+Formats a system prompt that describes capabilities and desired JSON response. It maintains conversation history to provide context across multiple commands and parses responses robustly.
 
-To use this framework in a Chrome extension:
+- **Voice Recognition & UI:**  
+Uses the Web Speech API for continuous listening. The modal interface displays interim and final transcripts, and provides notifications (errors, status updates, etc.).
 
-1. Include these files in your extension's content scripts
-2. Set up appropriate permissions in your manifest.json
-3. Initialize the components on page load or when activating voice commands
-4. Configure your workflows based on common user tasks
+---
 
-## Extending
+## Alternatives & Considerations
 
-You can extend this framework by:
+- **Voice Recognition:**  
+The extension uses the Web Speech API. Consider alternatives if targeting browsers that lack support or if you need more robust offline speech recognition.
 
-1. Adding new action types to DOMParser
-2. Creating custom workflows for different voice commands
-3. Enhancing the intent parsing system
-4. Adding specialized state handling for specific websites
+- **OpenAI Integration:**  
+The current implementation is geared toward GPT-4 via the OpenAI API. Other NLP providers or models could be integrated with minor modifications.
+
+- **State Machine Workflows:**  
+The state machine is generic; you can add or modify workflows to support additional tasks.
+
+---
+
+## Development & Contribution
+
+- **Modularity:**  
+Each component (DOMParser, ActionExecutor, OpenAIService, StateMachine) is modular, allowing independent testing and future extension.
+
+- **Customization:**  
+Update styling via the provided CSS files and modify workflows or UI behavior in the state machine callbacks.
+
+- **Testing:**  
+The extension includes extensive console logging to help trace command processing and DOM interactions during development.
+
+---
 
 ## License
 
-MIT 
+Distributed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+Vesper empowers users to automate web interactions using natural language. Its flexible architecture, state machine-driven workflows, and integration with AI make it a powerful tool for browser automation. Enjoy building, customizing, and extending Vesper to suit your needs!
