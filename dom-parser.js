@@ -49,6 +49,51 @@ class DOMParser {
   }
 
   /**
+   * Infers ARIA role from tag name for accessibility
+   * @private
+   * @param {Element} el - DOM element
+   * @returns {string} Inferred role or empty string
+   */
+  _inferRoleFromTagName(el) {
+    // Map common HTML elements to their implicit ARIA roles
+    const tagToRoleMap = {
+      'a': 'link',
+      'button': 'button',
+      'input': (() => {
+        // Input type determines role
+        switch(el.type) {
+          case 'button':
+          case 'submit':
+          case 'reset': return 'button';
+          case 'checkbox': return 'checkbox';
+          case 'radio': return 'radio';
+          case 'range': return 'slider';
+          case 'search': return 'searchbox';
+          default: return 'textbox';
+        }
+      })(),
+      'textarea': 'textbox',
+      'select': 'combobox',
+      'table': 'table',
+      'th': 'columnheader',
+      'tr': 'row',
+      'img': 'img',
+      'ul': 'list',
+      'ol': 'list',
+      'li': 'listitem',
+      'form': 'form',
+      'header': 'banner',
+      'nav': 'navigation',
+      'main': 'main',
+      'footer': 'contentinfo',
+      'aside': 'complementary',
+      'section': 'region'
+    };
+    
+    return tagToRoleMap[el.tagName.toLowerCase()] || '';
+  }
+
+  /**
    * Extracts interactive elements from the DOM and formats them for processing
    * @private
    * @returns {Array} Array of element objects with metadata and DOM references
@@ -77,6 +122,7 @@ class DOMParser {
         isVisible: this._isElementVisible(input),
         label: this._findLabelForElement(input),
         ariaLabel: input.getAttribute('aria-label') || '',
+        ariaRole: input.getAttribute('role') || this._inferRoleFromTagName(input),
         domReference: input  // Will be removed before sending to OpenAI
       });
     });
@@ -96,6 +142,7 @@ class DOMParser {
         isVisible: this._isElementVisible(textarea),
         label: this._findLabelForElement(textarea),
         ariaLabel: textarea.getAttribute('aria-label') || '',
+        ariaRole: textarea.getAttribute('role') || this._inferRoleFromTagName(textarea),
         domReference: textarea
       });
     });
@@ -113,6 +160,7 @@ class DOMParser {
         classes: Array.from(button.classList).join(' '),
         isVisible: this._isElementVisible(button),
         ariaLabel: button.getAttribute('aria-label') || '',
+        ariaRole: button.getAttribute('role') || this._inferRoleFromTagName(button),
         domReference: button
       });
     });
@@ -135,6 +183,7 @@ class DOMParser {
         isVisible: this._isElementVisible(select),
         label: this._findLabelForElement(select),
         ariaLabel: select.getAttribute('aria-label') || '',
+        ariaRole: select.getAttribute('role') || this._inferRoleFromTagName(select),
         domReference: select
       });
     });
@@ -152,6 +201,7 @@ class DOMParser {
         classes: Array.from(link.classList).join(' '),
         isVisible: this._isElementVisible(link),
         ariaLabel: link.getAttribute('aria-label') || '',
+        ariaRole: link.getAttribute('role') || this._inferRoleFromTagName(link),
         domReference: link
       });
     });
@@ -170,6 +220,7 @@ class DOMParser {
           classes: Array.from(el.classList).join(' '),
           isVisible: this._isElementVisible(el),
           ariaLabel: el.getAttribute('aria-label') || '',
+          ariaRole: el.getAttribute('role'),
           ariaSelected: el.getAttribute('aria-selected') === 'true',
           ariaExpanded: el.getAttribute('aria-expanded') === 'true',
           ariaChecked: el.getAttribute('aria-checked'),
@@ -302,8 +353,65 @@ class DOMParser {
       // First determine the target element
       let targetElement = null;
       
-      // Find by selector
-      if (selector) {
+      // Prioritize role and name if provided
+      if (role && name) {
+        // Get elements with explicit role attribute
+        let roleElements = Array.from(document.querySelectorAll(`[role="${role}"]`));
+        
+        // If no elements found with explicit role, try finding elements with implicit role
+        if (roleElements.length === 0) {
+          // Look for elements with the corresponding tag names that might have this implicit role
+          const tagSelectors = this._getTagsWithImplicitRole(role);
+          if (tagSelectors) {
+            roleElements = Array.from(document.querySelectorAll(tagSelectors));
+          }
+        }
+        
+        // Find element with matching name/text
+        targetElement = roleElements.find(el => 
+          el.textContent.includes(name) || 
+          el.value === name ||
+          el.getAttribute('name') === name ||
+          el.getAttribute('aria-label') === name ||
+          el.getAttribute('placeholder') === name
+        );
+        
+        if (!targetElement) {
+          // Try fuzzy matching if exact match fails
+          targetElement = roleElements.find(el => {
+            const elText = el.textContent.toLowerCase();
+            const elName = (el.getAttribute('name') || '').toLowerCase();
+            const elAriaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+            const elPlaceholder = (el.getAttribute('placeholder') || '').toLowerCase();
+            const searchName = name.toLowerCase();
+            
+            return elText.includes(searchName) || 
+                   elName.includes(searchName) || 
+                   elAriaLabel.includes(searchName) ||
+                   elPlaceholder.includes(searchName);
+          });
+        }
+        
+        if (targetElement) {
+          console.log(`Found element by role "${role}" and name "${name}"`, targetElement);
+        } else {
+          console.warn(`No elements found with role "${role}" and name "${name}"`);
+          
+          // If role+name failed, fallback to selector if provided
+          if (selector) {
+            console.log(`Falling back to selector: ${selector}`);
+          } else {
+            return { 
+              success: false, 
+              error: `No elements found with role "${role}" and name "${name}"`,
+              possibleReasons: ["Element may not be visible in DOM", "Role or name may be incorrect"] 
+            };
+          }
+        }
+      } 
+      
+      // Find by selector if no element found yet
+      if (!targetElement && selector) {
         const elements = Array.from(document.querySelectorAll(selector));
         
         if (elements.length === 0) {
@@ -322,27 +430,13 @@ class DOMParser {
           targetElement = elements[0];
         }
       } 
-      // Find by role and name
-      else if (role && name) {
-        const roleElements = Array.from(document.querySelectorAll(`[role="${role}"]`));
-        targetElement = roleElements.find(el => 
-          el.textContent.includes(name) || 
-          el.getAttribute('name') === name ||
-          el.getAttribute('aria-label') === name
-        );
-        
-        if (!targetElement) {
-          return { 
-            success: false, 
-            error: `No elements found with role "${role}" and name "${name}"`,
-            possibleReasons: ["Element may not be visible in DOM", "Role or name may be incorrect"] 
-          };
-        }
-      } else {
+      
+      // If no element found, return error
+      if (!targetElement) {
         return { 
           success: false, 
-          error: "Either selector or role+name must be provided",
-          possibleReasons: ["Missing identifier for the element"] 
+          error: "Could not find target element",
+          possibleReasons: ["Element may not be visible in DOM", "Identifiers (selector/role/name) may be incorrect"] 
         };
       }
       
@@ -383,7 +477,8 @@ class DOMParser {
           elementInfo: {
             tagName: targetElement.tagName,
             id: targetElement.id,
-            className: targetElement.className
+            className: targetElement.className,
+            role: targetElement.getAttribute('role') || this._inferRoleFromTagName(targetElement)
           }
         };
       } else {
@@ -574,6 +669,32 @@ class DOMParser {
       console.error("Error clearing element:", error);
       return false;
     }
+  }
+
+  /**
+   * Get tag selectors that have the specified implicit role
+   * @private
+   * @param {string} role - The ARIA role to find matching tags for
+   * @returns {string} CSS selector for tags with this implicit role
+   */
+  _getTagsWithImplicitRole(role) {
+    const roleToTagsMap = {
+      'button': 'button, input[type="button"], input[type="submit"], input[type="reset"]',
+      'link': 'a[href]',
+      'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="tel"], input[type="url"], textarea',
+      'checkbox': 'input[type="checkbox"]',
+      'radio': 'input[type="radio"]',
+      'combobox': 'select',
+      'slider': 'input[type="range"]',
+      'searchbox': 'input[type="search"]',
+      'list': 'ul, ol',
+      'listitem': 'li',
+      'table': 'table',
+      'row': 'tr',
+      'columnheader': 'th'
+    };
+    
+    return roleToTagsMap[role] || null;
   }
 }
 
