@@ -1,6 +1,6 @@
 # Vesper: Voice Command Browser Automation
 
-Vesper is a Chrome extension that lets you control your browser using voice commands. Initially built as a mail agent (hence some legacy names), it has pivoted to support general browser automation. The extension leverages voice recognition, DOM parsing, and OpenAI-powered command interpretation to execute actions on any website.
+Vesper is a Chrome extension that lets you control your browser using voice commands. The extension leverages voice recognition, DOM parsing, and OpenAI-powered command interpretation to execute actions on any website.
 
 ---
 
@@ -11,7 +11,6 @@ Vesper is a Chrome extension that lets you control your browser using voice comm
 - **State Machine Workflows:** Supports multi-step tasks (e.g., sending an email, performing searches, navigating) with a robust state machine.
 - **Dynamic DOM Parsing:** Scans the webpage for actionable elements (inputs, buttons, links, etc.) and interacts with them reliably.
 - **Customizable UI:** Includes a draggable modal for visual feedback and notifications.
-- **Contextual Command Handling:** Integrates legacy mail commands while supporting broader browser actions.
 
 ---
 
@@ -21,7 +20,7 @@ Vesper is a Chrome extension that lets you control your browser using voice comm
   - **`action-executor.js`** – Bridges the DOM parser with the OpenAI service, executing actions from voice commands.
   - **`dom-parser.js`** – Extracts actionable DOM elements and provides methods to execute interactions (click, type, etc.).
   - **`env-loader.js`** – Loads environment variables (e.g., your OpenAI API key) from a local `.env` file.
-  - **`content.js`** – Sets up the voice command handler (initially for Gmail, now repurposed for broader use).
+  - **`content.js`** – Sets up the voice command handler.
 
 - **Background & Popup:**  
   - **`background.js`** – Listens for installation and context menu events.
@@ -29,7 +28,7 @@ Vesper is a Chrome extension that lets you control your browser using voice comm
   
 - **State Machine:**  
   - **`state-machine.js`** – Implements a generic state machine to manage multi-step workflows.
-  - **Workflow Scripts:** Define specific workflows for tasks such as email composition, search, and navigation.
+  - **Workflow Scripts:** Define specific workflows for tasks such as email composition, creating events in calendar, search, and navigation.
 
 - **OpenAI Integration:**  
   - **`openai-service.js`** – Handles API calls to OpenAI, manages conversation context, and parses responses into actionable JSON.

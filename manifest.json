@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Voice Command Assistant",
+  "name": "Vesper",
   "version": "1.0",
   "description": "Control any website with voice commands using AI interpretation",
   "permissions": ["activeTab", "scripting", "audioCapture", "notifications", "contextMenus", "storage"],

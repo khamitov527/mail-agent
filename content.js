@@ -1,5 +1,5 @@
-// Command handler for Gmail
-class GmailCommandHandler {
+// Command handler
+class VesperCommandHandler {
   constructor() {
     this.setupMessageListener();
     this.setupNotificationSystem();
@@ -1543,11 +1543,11 @@ class GmailCommandHandler {
 }
 
 // Initialize the command handler
-const handler = new GmailCommandHandler();
+const handler = new VesperCommandHandler();
 
 // Expose the handler to the window object so it can be accessed directly
 // This allows recognition.start() to be called directly from a user gesture handler
-window.mailAgentHandler = handler;
+window.vesperHandler = handler;
 
 // Log that the content script is running
-console.log('Mail Agent content script is running on Gmail'); 
+console.log('Vesper Agent content script is running...'); 

@@ -21,19 +21,19 @@ document.addEventListener('DOMContentLoaded', function() {
         function: function() {
           // This code runs in the context of the page
           // First check if our handler is already initialized
-          if (window.mailAgentHandler) {
+          if (window.vesperHandler) {
             console.log('Starting voice assistant');
             
             // Update agent name and styling
-            window.mailAgentHandler.settings = {
-              ...window.mailAgentHandler.settings,
+            window.vesperHandler.settings = {
+              ...window.vesperHandler.settings,
               agentName: 'Voice Assistant',
               mainColor: '#4169E1' // Royal Blue
             };
             
             // Create the modal UI if it doesn't exist
             if (!document.querySelector('.vesper-modal')) {
-              window.mailAgentHandler.createModal();
+              window.vesperHandler.createModal();
             } else {
               // Make sure the modal is visible
               const modal = document.querySelector('.vesper-modal');
