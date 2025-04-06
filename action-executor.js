@@ -92,7 +92,55 @@ class ActionExecutor {
     if (actionPlan.actions && Array.isArray(actionPlan.actions) && actionPlan.actions.length > 0) {
       // Multiple actions
       console.log(`Adding ${actionPlan.actions.length} actions from 'actions' array to queue`);
-      this.actionQueue.push(...actionPlan.actions);
+      
+      // Make sure each action has the proper format before adding to queue
+      const formattedActions = actionPlan.actions.map(action => {
+        // If the action is already well-formed with type, return it as is
+        if (action.type) {
+          return action;
+        }
+        
+        // Otherwise extract the action details from different formats
+        let type, selector, value, index, role, name, text, elementId;
+        
+        if (typeof action === 'string') {
+          type = action;
+        } else if (action.action && typeof action.action === 'object') {
+          type = action.action.type;
+          selector = action.action.selector;
+          value = action.action.value;
+          index = action.action.index;
+          role = action.action.role;
+          name = action.action.name;
+          text = action.action.text;
+          elementId = action.action.elementId;
+        } else if (action.action && typeof action.action === 'string') {
+          type = action.action;
+          selector = action.selector;
+          value = action.value;
+          index = action.index;
+          role = action.role;
+          name = action.name;
+          text = action.text;
+          elementId = action.elementId;
+        }
+        
+        return {
+          type,
+          selector,
+          value,
+          index,
+          role,
+          name,
+          text,
+          elementId
+        };
+      });
+      
+      // Filter out any malformed actions
+      const validActions = formattedActions.filter(action => action.type);
+      console.log(`Adding ${validActions.length} validated actions to queue`);
+      this.actionQueue.push(...validActions);
     } else if (actionPlan.action && actionPlan.action !== 'No action' && typeof actionPlan.action === 'string') {
       // Single action as string
       console.log(`Adding single action from 'action' string property to queue:`, actionPlan.action);
@@ -117,23 +165,51 @@ class ActionExecutor {
 
     this.isExecuting = true;
     const results = [];
+    let continueExecution = true;
     
     try {
-      while (this.actionQueue.length > 0) {
+      console.log(`Starting execution of ${this.actionQueue.length} queued actions`);
+      
+      while (this.actionQueue.length > 0 && continueExecution) {
         const action = this.actionQueue.shift();
+        console.log(`Executing action ${this.actionQueue.length + 1}/${this.actionQueue.length + results.length + 1}:`, JSON.stringify(action, null, 2));
         
-        // Wait for DOM updates between actions if needed
-        if (this.actionQueue.length > 0) {
-          await this.waitForDomUpdate();
-        }
-        
-        // Execute the current action
-        const actionResult = await this.executeSingleAction(action);
-        results.push(actionResult);
-        
-        // If we have a warning about no visible changes, add it to the overall results
-        if (actionResult.warning) {
-          console.warn(`Action executed but might not have worked as expected: ${actionResult.warning}`);
+        try {
+          // Execute the current action
+          const actionResult = await this.executeSingleAction(action);
+          results.push(actionResult);
+          
+          // If we have a warning about no visible changes, add it to the overall results
+          if (actionResult.warning) {
+            console.warn(`Action executed but might not have worked as expected: ${actionResult.warning}`);
+          }
+          
+          // Wait for DOM updates between actions
+          if (this.actionQueue.length > 0) {
+            console.log(`Waiting for DOM update before next action...`);
+            await this.waitForDomUpdate(action);
+          }
+        } catch (actionError) {
+          console.error(`Error executing action:`, actionError);
+          
+          // Add failed action to results
+          results.push({
+            success: false,
+            error: actionError.message,
+            action: action.type,
+            selector: action.selector
+          });
+          
+          // Decide whether to continue with remaining actions
+          if (actionError.message.includes('element not found') || 
+              actionError.message.includes('invalid action')) {
+            // These are errors we might be able to recover from
+            console.log('Recoverable error, continuing with next action');
+          } else {
+            // More serious error, stop execution
+            console.error('Critical error, stopping action queue execution');
+            continueExecution = false;
+          }
         }
       }
       
@@ -256,10 +332,38 @@ class ActionExecutor {
 
   /**
    * Wait for DOM updates between actions
-   * @returns {Promise} - Promise resolving after a short delay
+   * @param {Object} lastAction - The action that was just executed
+   * @returns {Promise} - Promise resolving after a delay
    */
-  waitForDomUpdate() {
-    return new Promise(resolve => setTimeout(resolve, 500));
+  waitForDomUpdate(lastAction) {
+    // Determine wait time based on the type of action just performed
+    let waitTime = 500; // Default delay
+    
+    if (lastAction) {
+      // Different wait times for different action types
+      switch (lastAction.type) {
+        case 'click':
+          // Longer wait after clicks as they often trigger API calls or page changes
+          waitTime = 800;
+          break;
+        case 'type':
+          // Shorter wait time for typing actions
+          waitTime = 300;
+          break;
+        case 'select':
+          // Medium wait time for selection actions
+          waitTime = 600;
+          break;
+        case 'navigation':
+        case 'submit':
+          // Much longer wait for navigation or form submission
+          waitTime = 1500;
+          break;
+      }
+    }
+    
+    console.log(`Waiting ${waitTime}ms for DOM updates...`);
+    return new Promise(resolve => setTimeout(resolve, waitTime));
   }
 }
 

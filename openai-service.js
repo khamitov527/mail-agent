@@ -161,7 +161,9 @@ You must respond in valid JSON with the following structure:
   "context": {
     // Any key-value pairs to update in the state machine context
   }
-}`;
+}
+
+IMPORTANT: If the user's command implies multiple steps (like "compose an email to Josh with subject Meeting and body Let's meet tomorrow"), generate an array of actions in the correct sequence under the "actions" key rather than a single action. This allows all steps to be executed without requiring further user input.`;
 
     // Add state-specific guidance
     switch (state) {
