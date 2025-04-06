@@ -41,22 +41,42 @@ class OpenAIService {
 
   /**
    * Process a voice command with actionable DOM elements
-   * @param {string} command - The user's voice command
-   * @param {Array} actionableElements - Array of actionable DOM elements
+   * @param {Object} params - Command parameters
+   * @param {string} params.command - The user's voice command
+   * @param {Array} params.stepsDone - Steps already completed 
+   * @param {Array} params.domElements - Array of actionable DOM elements
    * @returns {Promise<Object>} - Promise resolving to OpenAI response with actions and context updates
    */
-  async processCommand(command, actionableElements) {
+  async processCommand(params) {
     try {
+      // Handle both old and new format
+      let command, stepsDone, domElements;
+      
+      if (typeof params === 'string') {
+        // Old format: processCommand(command, actionableElements)
+        command = params;
+        stepsDone = [];
+        domElements = arguments[1] || [];
+        console.warn('Using deprecated processCommand format. Please update to the new object parameter format.');
+      } else {
+        // New format: processCommand({ command, stepsDone, domElements })
+        command = params.command;
+        stepsDone = params.stepsDone || [];
+        domElements = params.domElements || [];
+      }
+      
       console.log('Processing command:', command);
-      console.log('With actionable elements:', actionableElements);
+      console.log('With completed steps:', stepsDone.length);
+      console.log('With actionable elements:', domElements.length);
       
       // Prepare the system message
-      const systemMessage = this._generateSystemPrompt('COMMAND');
+      const systemMessage = this._generateLoopBasedSystemPrompt();
       
-      // Create the user message containing the command and elements
+      // Create the user message containing the command, steps done, and elements
       const userMessage = JSON.stringify({
         command: command,
-        elements: actionableElements
+        stepsDone: stepsDone,
+        elements: domElements
       });
       
       // Create or update conversation history
@@ -118,112 +138,55 @@ class OpenAIService {
   }
   
   /**
-   * Generate the system prompt based on the current state
+   * Generate the system prompt for loop-based action execution
    * @private
-   * @param {string} state - The current state of the state machine
    * @returns {string} - The system prompt
    */
-  _generateSystemPrompt(state) {
-    // Base system prompt
-    let prompt = `You are an AI assistant integrated into a Chrome extension for web browsing automation.
+  _generateLoopBasedSystemPrompt() {
+    return `You are an AI assistant integrated into a Chrome extension for web browsing automation.
 
 Your task is to help users perform actions on websites via voice commands.
-You are currently in state: ${state}.
+You will be receiving:
+1. The user's original voice command
+2. A list of steps already completed
+3. The current DOM state with actionable elements
 
 CAPABILITIES:
 - You can analyze the current webpage DOM and identify actionable elements
-- You can generate specific actions for the browser extension to execute
-- You MUST output valid JSON containing either an 'action' object or an 'actions' array
+- You generate ONE action at a time for the browser extension to execute
+- After each action execution, you will be called again with updated DOM and steps
+- You determine when the task is complete and no more actions are needed
 
 RESPONSE FORMAT:
 You must respond in valid JSON with the following structure:
 {
-  "action": {
-    "type": "click|type|select|clear",
-    "elementId": "element_id", // Preferred method if available
-    "selector": "css_selector", // Alternative to elementId
-    "text": "button_text", // Alternative way to identify elements
-    "value": "text_to_type" // Required for type action
-  },
-  // OR for multiple actions
   "actions": [
     {
-      "type": "click",
-      "elementId": "element_id"
-    },
-    {
-      "type": "type",
-      "elementId": "element_id",
-      "value": "text to type"
+      "type": "click|type|select|clear",
+      "selector": "css_selector", // CSS selector to find the element
+      "role": "button|textbox|etc", // Optional ARIA role to identify element
+      "name": "button_text_or_name", // Optional name, text or label to identify element
+      "value": "text_to_type" // Required for type action
     }
   ],
-  // Optional context updates
-  "context": {
-    // Any key-value pairs to update in the state machine context
-  }
+  "reasoning": "Brief explanation of the action chosen",
+  "isDone": false // Set to true when the full task is complete
 }
 
-IMPORTANT: If the user's command implies multiple steps (like "compose an email to Josh with subject Meeting and body Let's meet tomorrow"), generate an array of actions in the correct sequence under the "actions" key rather than a single action. This allows all steps to be executed without requiring further user input.`;
+GUIDELINES:
+1. Return EXACTLY ONE action in the actions array (or empty array if done)
+2. Prioritize using role+name for element identification when available
+3. Fall back to selectors if needed for complex elements
+4. When the full task is complete, return an empty actions array
+5. Use a step-by-step approach, don't try to do too much in one action
+6. If an element doesn't exist but should (like a popup that hasn't loaded),
+   choose a sensible waiting action or try an alternative approach
 
-    // Add state-specific guidance
-    switch (state) {
-      case 'INIT':
-        prompt += `
-In the INIT state, you should:
-- Understand the user's intent from the prompt
-- Identify the first step needed to achieve the goal
-- Return actions to navigate to the appropriate starting point`;
-        break;
-        
-      case 'OPEN_COMPOSER':
-        prompt += `
-In the OPEN_COMPOSER state, you should:
-- Look for compose/new/create buttons related to starting a new message/email
-- Return a click action on the identified element`;
-        break;
-        
-      case 'FILL_RECIPIENT':
-        prompt += `
-In the FILL_RECIPIENT state, you should:
-- Identify the recipient field (To:, recipient, email address input)
-- Return a type action with the recipient's name or email address from context`;
-        break;
-        
-      case 'FILL_BODY':
-        prompt += `
-In the FILL_BODY state, you should:
-- Identify the email body/message textarea
-- Return a type action with the message content from context`;
-        break;
-        
-      case 'CONFIRM_SEND':
-        prompt += `
-In the CONFIRM_SEND state, you should:
-- Ask the user to confirm they want to send the message
-- Update the context with their confirmation status`;
-        break;
-        
-      case 'SEND_EMAIL':
-        prompt += `
-In the SEND_EMAIL state, you should:
-- Identify the send button
-- Return a click action on the send button`;
-        break;
-        
-      case 'DONE':
-        prompt += `
-In the DONE state, you should:
-- Confirm to the user that the task has been completed
-- No more actions are needed`;
-        break;
-        
-      default:
-        // For any other state
-        prompt += `
-For the current state, analyze the available UI elements and determine what action would progress toward completing the task stored in the context.`;
-    }
-
-    return prompt;
+IMPORTANT NOTES:
+- Your response will be parsed as JSON, so it must be valid JSON format
+- If no further actions are needed, return an empty actions array
+- The actions array should contain at most ONE action at a time
+- If you can't complete the task with the available elements, explain why`;
   }
   
   /**

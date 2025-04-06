@@ -7,8 +7,9 @@ class ActionExecutor {
   constructor(apiKey) {
     this.domParser = new window.DOMParser();
     this.openAIService = new window.OpenAIService(apiKey);
-    this.actionQueue = [];
     this.isExecuting = false;
+    this.maxRetries = 2;
+    this.maxTotalFailures = 2;
   }
 
   /**
@@ -20,220 +21,140 @@ class ActionExecutor {
   }
 
   /**
-   * Process a voice command by sending it to OpenAI along with DOM elements
+   * Process a voice command using the loop-based approach
    * @param {String} voiceCommand - User's voice command
-   * @returns {Promise} - Promise resolving to the result of the action
+   * @returns {Promise} - Promise resolving to the result of the action execution
    */
   async processVoiceCommand(voiceCommand) {
+    if (this.isExecuting) {
+      console.log('Already executing a command, please wait');
+      return { success: false, message: 'Already executing a command, please wait' };
+    }
+
     try {
+      this.isExecuting = true;
       console.log(`Processing voice command: "${voiceCommand}"`);
       
-      // 1. Get actionable DOM elements (using new lightweight format)
-      const actionableElements = this.domParser.getActionableElements();
-      console.log(`Found ${actionableElements.length} actionable elements`);
+      // Initialize execution state
+      const stepsDone = [];
+      let totalFailures = 0;
+      let isComplete = false;
       
-      // 2. Send voice command and elements to OpenAI
-      const actionPlan = await this.openAIService.processCommand(voiceCommand, actionableElements);
-      console.log('OpenAI returned action plan:', JSON.stringify(actionPlan, null, 2));
-      
-      // 3. Handle "No action" case
-      if (actionPlan.action === 'No action' || 
-          (actionPlan.actions && actionPlan.actions.length === 0) ||
-          (!actionPlan.action && !actionPlan.actions)) {
-        console.log('OpenAI found no matching action for the command');
-        return { 
-          success: true, 
-          message: 'No action found for this command',
-          action: { action: 'No action' }
-        };
+      // Main execution loop
+      while (!isComplete) {
+        try {
+          // 1. Get current actionable DOM elements
+          const domElements = await this.domParser.getActionableElements();
+          console.log(`Scraped ${domElements.length} actionable elements from DOM`);
+          
+          // 2. Send current state to OpenAI
+          const openAIResponse = await this.openAIService.processCommand({
+            command: voiceCommand,
+            stepsDone: stepsDone,
+            domElements: domElements
+          });
+          console.log('OpenAI returned:', JSON.stringify(openAIResponse, null, 2));
+          
+          // 3. Check if we're done
+          if (!openAIResponse.actions || openAIResponse.actions.length === 0) {
+            console.log('No more actions to execute, command complete');
+            isComplete = true;
+            break;
+          }
+          
+          // 4. Execute the next action (only the first one in the array)
+          const nextAction = openAIResponse.actions[0];
+          console.log('Executing next action:', JSON.stringify(nextAction, null, 2));
+          
+          // Try to execute the action (with retries)
+          let actionSuccess = false;
+          let retryCount = 0;
+          let actionError = null;
+          
+          while (retryCount <= this.maxRetries && !actionSuccess) {
+            try {
+              if (retryCount > 0) {
+                console.log(`Retry attempt ${retryCount}/${this.maxRetries}...`);
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+              
+              // Execute the action
+              const { selector, type, value, index, role, name } = nextAction;
+              const result = await this.executeSingleAction(nextAction);
+              
+              if (result.success) {
+                console.log(`Action executed successfully: ${type}`);
+                actionSuccess = true;
+                
+                // Add the action to stepsDone
+                stepsDone.push({
+                  ...nextAction,
+                  timestamp: Date.now(),
+                  status: 'success'
+                });
+                
+                // Wait for DOM updates before next iteration
+                console.log('Waiting for DOM to update...');
+                await this.waitForDomUpdate(nextAction);
+              } else {
+                actionError = result.error;
+                console.error(`Action execution failed: ${result.error}`);
+                retryCount++;
+              }
+            } catch (error) {
+              actionError = error.message;
+              console.error(`Error during action execution: ${error.message}`);
+              retryCount++;
+            }
+          }
+          
+          // If all retries failed
+          if (!actionSuccess) {
+            console.error(`Failed to execute action after ${this.maxRetries} retries`);
+            totalFailures++;
+            
+            // Add the failed action to stepsDone
+            stepsDone.push({
+              ...nextAction,
+              timestamp: Date.now(),
+              status: 'failed',
+              error: actionError
+            });
+            
+            // Check if we should bail out completely
+            if (totalFailures >= this.maxTotalFailures) {
+              console.error(`Reached maximum total failures (${this.maxTotalFailures}), stopping execution`);
+              isComplete = true;
+              break;
+            }
+          }
+        } catch (loopError) {
+          console.error('Error in execution loop:', loopError);
+          totalFailures++;
+          
+          if (totalFailures >= this.maxTotalFailures) {
+            console.error(`Reached maximum total failures (${this.maxTotalFailures}), stopping execution`);
+            isComplete = true;
+          }
+        }
       }
       
-      // 4. Add actions to the queue
-      console.log('Adding actions to queue...');
-      this.addActionsToQueue(actionPlan);
-      console.log(`Action queue now has ${this.actionQueue.length} actions:`, 
-                 JSON.stringify(this.actionQueue, null, 2));
-      
-      // 5. Start executing the action queue if not already executing
-      if (!this.isExecuting && this.actionQueue.length > 0) {
-        console.log('Starting execution of action queue...');
-        const executionResult = await this.executeActionQueue();
-        console.log('Action queue execution completed:', JSON.stringify(executionResult, null, 2));
-        
-        // Include original action plan in the result
-        executionResult.originalAction = actionPlan;
-        
-        return executionResult;
-      } else if (this.actionQueue.length === 0) {
-        console.log('No actions were added to the queue');
-        return { 
-          success: true,
-          message: 'No specific actions to execute',
-          action: { action: 'No action' }
-        };
-      }
-      
-      console.log('Actions queued but not executed (already executing)');
-      return { success: true, message: 'Voice command added to queue' };
+      // Return the final result
+      const success = totalFailures < this.maxTotalFailures;
+      return {
+        success: success,
+        message: success 
+          ? 'Voice command executed successfully' 
+          : 'Voice command execution failed',
+        steps: stepsDone,
+        totalSteps: stepsDone.length,
+        completedSteps: stepsDone.filter(step => step.status === 'success').length,
+        failedSteps: stepsDone.filter(step => step.status === 'failed').length
+      };
     } catch (error) {
       console.error('Error processing voice command:', error);
       return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Add actions to the execution queue
-   * @param {Object} actionPlan - Plan returned by OpenAI
-   */
-  addActionsToQueue(actionPlan) {
-    console.log('Processing action plan:', JSON.stringify(actionPlan, null, 2));
-    
-    // Check if the action plan contains a single action or multiple actions
-    if (actionPlan.actions && Array.isArray(actionPlan.actions) && actionPlan.actions.length > 0) {
-      // Multiple actions
-      console.log(`Adding ${actionPlan.actions.length} actions from 'actions' array to queue`);
-      
-      // Make sure each action has the proper format before adding to queue
-      const formattedActions = actionPlan.actions.map(action => {
-        // If the action is already well-formed with type, return it as is
-        if (action.type) {
-          return action;
-        }
-        
-        // Otherwise extract the action details from different formats
-        let type, selector, value, index, role, name, text, elementId;
-        
-        if (typeof action === 'string') {
-          type = action;
-        } else if (action.action && typeof action.action === 'object') {
-          type = action.action.type;
-          selector = action.action.selector;
-          value = action.action.value;
-          index = action.action.index;
-          role = action.action.role;
-          name = action.action.name;
-          text = action.action.text;
-          elementId = action.action.elementId;
-        } else if (action.action && typeof action.action === 'string') {
-          type = action.action;
-          selector = action.selector;
-          value = action.value;
-          index = action.index;
-          role = action.role;
-          name = action.name;
-          text = action.text;
-          elementId = action.elementId;
-        }
-        
-        return {
-          type,
-          selector,
-          value,
-          index,
-          role,
-          name,
-          text,
-          elementId
-        };
-      });
-      
-      // Filter out any malformed actions
-      const validActions = formattedActions.filter(action => action.type);
-      console.log(`Adding ${validActions.length} validated actions to queue`);
-      this.actionQueue.push(...validActions);
-    } else if (actionPlan.action && actionPlan.action !== 'No action' && typeof actionPlan.action === 'string') {
-      // Single action as string
-      console.log(`Adding single action from 'action' string property to queue:`, actionPlan.action);
-      this.actionQueue.push(actionPlan);
-    } else if (actionPlan.action && typeof actionPlan.action === 'object' && actionPlan.action.type) {
-      // Single action as object
-      console.log(`Adding single action from 'action' object property to queue:`, JSON.stringify(actionPlan.action, null, 2));
-      this.actionQueue.push(actionPlan.action);
-    } else {
-      console.warn('Received action plan with no recognized actions:', JSON.stringify(actionPlan, null, 2));
-    }
-  }
-
-  /**
-   * Execute the action queue sequentially
-   * @returns {Promise} - Promise resolving when all actions are executed
-   */
-  async executeActionQueue() {
-    if (this.isExecuting || this.actionQueue.length === 0) {
-      return;
-    }
-
-    this.isExecuting = true;
-    const results = [];
-    let continueExecution = true;
-    
-    try {
-      console.log(`Starting execution of ${this.actionQueue.length} queued actions`);
-      
-      while (this.actionQueue.length > 0 && continueExecution) {
-        const action = this.actionQueue.shift();
-        console.log(`Executing action ${this.actionQueue.length + 1}/${this.actionQueue.length + results.length + 1}:`, JSON.stringify(action, null, 2));
-        
-        try {
-          // Execute the current action
-          const actionResult = await this.executeSingleAction(action);
-          results.push(actionResult);
-          
-          // If we have a warning about no visible changes, add it to the overall results
-          if (actionResult.warning) {
-            console.warn(`Action executed but might not have worked as expected: ${actionResult.warning}`);
-          }
-          
-          // Wait for DOM updates between actions
-          if (this.actionQueue.length > 0) {
-            console.log(`Waiting for DOM update before next action...`);
-            await this.waitForDomUpdate(action);
-          }
-        } catch (actionError) {
-          console.error(`Error executing action:`, actionError);
-          
-          // Add failed action to results
-          results.push({
-            success: false,
-            error: actionError.message,
-            action: action.type,
-            selector: action.selector
-          });
-          
-          // Decide whether to continue with remaining actions
-          if (actionError.message.includes('element not found') || 
-              actionError.message.includes('invalid action')) {
-            // These are errors we might be able to recover from
-            console.log('Recoverable error, continuing with next action');
-          } else {
-            // More serious error, stop execution
-            console.error('Critical error, stopping action queue execution');
-            continueExecution = false;
-          }
-        }
-      }
-      
-      // Compile overall execution results
-      const anyWarnings = results.some(r => r.warning);
-      const allSucceeded = results.every(r => r.success);
-      
-      return {
-        success: allSucceeded,
-        message: allSucceeded 
-          ? (anyWarnings 
-              ? 'Actions executed but some might not have worked as expected'
-              : 'Voice command processed successfully')
-          : 'Some actions failed to execute',
-        results: results,
-        warning: anyWarnings ? 'Some actions might not have worked as expected' : null
-      };
-    } catch (error) {
-      console.error('Error executing action queue:', error);
-      return {
-        success: false,
-        error: error.message,
-        results: results
-      };
     } finally {
       this.isExecuting = false;
     }
@@ -286,47 +207,25 @@ class ActionExecutor {
       
       console.log(`Action details - Type: ${type}, Selector: ${selector}, Value: ${value}${index !== undefined ? `, Index: ${index}` : ''}${role ? `, Role: ${role}` : ''}${name ? `, Name: ${name}` : ''}`);
       
-      // Allow actions with just role and name (no selector required)
-      if ((!selector && !(role && name)) || !type) {
-        throw new Error('Invalid action: missing selector/identifier or type');
+      // Required fields check
+      if (!type) {
+        return {
+          success: false,
+          error: 'Invalid action: missing type'
+        };
       }
       
       // Execute the action on the DOM element
       console.log(`Attempting to execute "${type}"${selector ? ` on selector "${selector}"` : ''}${index !== undefined ? ` at index ${index}` : ''}${role ? ` with role "${role}"` : ''}${name ? ` and name "${name}"` : ''}`);
       const result = await this.domParser.executeAction(selector, type, value, index, role, name);
       
-      if (result.success) {
-        console.log(`Executed action: ${type}${selector ? ` on ${selector}` : ''}${role ? ` with role "${role}"` : ''}${name ? ` and name "${name}"` : ''} - Success`, result);
-        
-        // Check for warning about no visible changes
-        if (result.warning) {
-          console.warn(result.warning);
-          console.warn('Possible reasons:', result.possibleReasons);
-          
-          // Return a more detailed result with the warning
-          return {
-            success: true,
-            action: type,
-            selector: selector,
-            warning: result.warning,
-            possibleReasons: result.possibleReasons,
-            elementInfo: result.elementInfo
-          };
-        }
-        
-        return {
-          success: true,
-          action: type,
-          selector: selector,
-          visibleChange: result.visibleChange
-        };
-      } else {
-        console.error(`Failed to execute action: ${type} on ${selector}`, result.error);
-        throw new Error(result.error || 'Unknown error executing action');
-      }
+      return result;
     } catch (error) {
       console.error('Error executing action:', error);
-      throw error;
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
