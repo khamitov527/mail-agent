@@ -10,6 +10,56 @@ class DOMParser {
     this.lastSnapshot = null;
     // For simpler element retrieval in executeAction
     this.elementCache = new Map();
+    // Flag to track if DOM has been parsed
+    this.isInitialized = false;
+    // Cache for DOM elements
+    this.domCache = null;
+    // Timestamp of last DOM parsing
+    this.lastParseTime = null;
+    // Parse the DOM once at initialization
+    this._initialize();
+  }
+
+  /**
+   * Initialize the DOM parser by parsing the DOM once
+   * @private
+   */
+  _initialize() {
+    try {
+      console.log("Initial DOM parsing...");
+      this._parseDOM();
+      this.isInitialized = true;
+      this.lastParseTime = Date.now();
+      console.log("Initial DOM parsing complete");
+    } catch (error) {
+      console.error("Error during initial DOM parsing:", error);
+    }
+  }
+
+  /**
+   * Parse the DOM and update the cache
+   * @private
+   */
+  _parseDOM() {
+    // Clear previous cache
+    this.elementCache.clear();
+    
+    // Find all potentially interactive elements
+    const actionableElements = this._extractActionableElements();
+    
+    // Cache elements by their unique ID for later retrieval
+    actionableElements.forEach(element => {
+      if (element.uniqueId) {
+        this.elementCache.set(element.uniqueId, element.domReference);
+      }
+    });
+    
+    // Save a snapshot without DOM references for OpenAI
+    this.domCache = actionableElements.map(el => {
+      // Create a clean copy without the DOM reference
+      const { domReference, ...cleanElement } = el;
+      return cleanElement;
+    });
   }
 
   /**
@@ -18,34 +68,65 @@ class DOMParser {
    * @returns {Promise<Array>} Array of actionable elements with their metadata
    */
   async getActionableElements() {
-    console.log("Capturing actionable elements from DOM...");
+    console.log("Getting actionable elements from cache...");
     
     try {
-      // Clear previous cache
-      this.elementCache.clear();
+      // If not initialized, initialize now
+      if (!this.isInitialized) {
+        this._initialize();
+      }
       
-      // Find all potentially interactive elements
-      const actionableElements = this._extractActionableElements();
-      
-      // Cache elements by their unique ID for later retrieval
-      actionableElements.forEach(element => {
-        if (element.uniqueId) {
-          this.elementCache.set(element.uniqueId, element.domReference);
-        }
-      });
-      
-      // Save a snapshot without DOM references for OpenAI
-      this.lastSnapshot = actionableElements.map(el => {
-        // Create a clean copy without the DOM reference
-        const { domReference, ...cleanElement } = el;
-        return cleanElement;
-      });
-      
-      return this.lastSnapshot;
+      // Return cached data
+      return this.domCache || [];
     } catch (error) {
       console.error("Error getting actionable elements:", error);
       return [];
     }
+  }
+
+  /**
+   * Force a refresh of the DOM cache
+   * This should be called when the DOM has changed significantly
+   * @returns {Promise<Array>} Updated array of actionable elements
+   */
+  async refreshCache() {
+    console.log("Refreshing DOM cache...");
+    try {
+      this._parseDOM();
+      this.lastParseTime = Date.now();
+      console.log("DOM cache refreshed");
+      return this.domCache || [];
+    } catch (error) {
+      console.error("Error refreshing DOM cache:", error);
+      return this.domCache || [];
+    }
+  }
+
+  /**
+   * Check if the cache needs to be refreshed based on time or other criteria
+   * @param {number} maxAge - Maximum age of cache in milliseconds
+   * @returns {boolean} Whether the cache should be refreshed
+   */
+  shouldRefreshCache(maxAge = 30000) { // Default 30 seconds
+    if (!this.lastParseTime) return true;
+    
+    const now = Date.now();
+    const age = now - this.lastParseTime;
+    
+    return age > maxAge;
+  }
+
+  /**
+   * Manually invalidate the cache
+   * This should be called when the page content changes significantly
+   * or when navigating to a new page
+   */
+  invalidateCache() {
+    console.log("Manually invalidating DOM cache");
+    this.isInitialized = false;
+    this.domCache = null;
+    this.lastParseTime = null;
+    this.elementCache.clear();
   }
 
   /**
@@ -471,6 +552,14 @@ class DOMParser {
       }
       
       if (actionResult) {
+        // After executing an action, refresh the DOM cache to ensure we have the latest state
+        // This is important because actions like clicks can change the DOM structure
+        setTimeout(() => {
+          this.refreshCache().catch(err => {
+            console.error("Error refreshing DOM cache after action:", err);
+          });
+        }, 100); // Small delay to allow DOM to update
+        
         return { 
           success: true, 
           visibleChange: true,

@@ -10,6 +10,8 @@ class ActionExecutor {
     this.isExecuting = false;
     this.maxRetries = 2;
     this.maxTotalFailures = 2;
+    // Cache refresh interval in milliseconds (default: 30 seconds)
+    this.cacheRefreshInterval = 30000;
   }
 
   /**
@@ -43,11 +45,17 @@ class ActionExecutor {
       // Main execution loop
       while (!isComplete) {
         try {
-          // 1. Get current actionable DOM elements
-          const domElements = await this.domParser.getActionableElements();
-          console.log(`Scraped ${domElements.length} actionable elements from DOM`);
+          // 1. Check if DOM cache needs to be refreshed
+          if (this.domParser.shouldRefreshCache(this.cacheRefreshInterval)) {
+            console.log("DOM cache is stale, refreshing...");
+            await this.domParser.refreshCache();
+          }
           
-          // 2. Send current state to OpenAI
+          // 2. Get current actionable DOM elements from cache
+          const domElements = await this.domParser.getActionableElements();
+          console.log(`Retrieved ${domElements.length} actionable elements from cache`);
+          
+          // 3. Send current state to OpenAI
           const openAIResponse = await this.openAIService.processCommand({
             command: voiceCommand,
             stepsDone: stepsDone,
@@ -55,14 +63,14 @@ class ActionExecutor {
           });
           console.log('OpenAI returned:', JSON.stringify(openAIResponse, null, 2));
           
-          // 3. Check if we're done
+          // 4. Check if we're done
           if (!openAIResponse.actions || openAIResponse.actions.length === 0) {
             console.log('No more actions to execute, command complete');
             isComplete = true;
             break;
           }
           
-          // 4. Execute the next action (only the first one in the array)
+          // 5. Execute the next action (only the first one in the array)
           const nextAction = openAIResponse.actions[0];
           console.log('Executing next action:', JSON.stringify(nextAction, null, 2));
           
@@ -218,6 +226,17 @@ class ActionExecutor {
       // Execute the action on the DOM element
       console.log(`Attempting to execute "${type}"${selector ? ` on selector "${selector}"` : ''}${index !== undefined ? ` at index ${index}` : ''}${role ? ` with role "${role}"` : ''}${name ? ` and name "${name}"` : ''}`);
       const result = await this.domParser.executeAction(selector, type, value, index, role, name);
+      
+      // If the action was successful and it's a significant action that might change the page structure,
+      // invalidate the cache to force a fresh DOM parsing on the next iteration
+      if (result.success) {
+        // Actions that might significantly change the page structure
+        const significantActions = ['click', 'submit', 'navigate'];
+        if (significantActions.includes(type.toLowerCase())) {
+          console.log(`Significant action "${type}" executed, invalidating DOM cache`);
+          this.domParser.invalidateCache();
+        }
+      }
       
       return result;
     } catch (error) {
