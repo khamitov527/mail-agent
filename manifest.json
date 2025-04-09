@@ -6,14 +6,20 @@
   "permissions": ["activeTab", "scripting", "audioCapture", "notifications", "contextMenus", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["env-loader.js", "dom-parser.js", "openai-service.js", "action-executor.js", "content.js"]
+    "js": [
+      "src/utils/env-loader.js",
+      "src/utils/dom-parser.js",
+      "src/services/openai-service.js",
+      "src/services/action-executor.js",
+      "src/content/content.js"
+    ]
   }],
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_icon": "icon.png"
   },
   "icons": {

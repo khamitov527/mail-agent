@@ -9,7 +9,7 @@ class OpenAIService {
    * @param {Object} config - Optional configuration object
    */
   constructor(apiKey, {
-    model = 'gpt-4-1106-preview',
+    model = 'gpt-4o',
     headers = {},
     apiEndpoint = 'https://api.openai.com/v1/chat/completions',
     temperature = 0.2,
